@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: CC0-1.0
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install XcodeGen
+        run: command -v xcodegen || brew install xcodegen
+      - name: Test the AT tool against a fake modem
+        run: python3 serial-driver/tools/test_quectel_at.py
+      - name: Test the QMI tool against a simulated modem
+        run: python3 qmi-userspace/test_qmi.py
+      - name: Build and test the menu bar app
+        run: swift test --package-path modem-gui && swift build --package-path modem-gui -c release
+      - name: Compile driver and installer (unsigned)
+        run: serial-driver/scripts/build.sh --unsigned
+
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install clang with libFuzzer
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-rt-18-dev
+      - name: Fuzz the driver against the fake DriverKit
+        run: serial-driver/fuzz/run.sh 60
+      - name: Keep the failing input
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash
+          path: serial-driver/fuzz/build/crash-*

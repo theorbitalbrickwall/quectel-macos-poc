@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: CC0-1.0 AND MIT
+# Contains code from idy/ch348-macos, Copyright (c) 2026 idy, under the MIT
+# licence: see serial-driver/LICENSE-ch348-macos.
+# Xcode project definition; generate with `xcodegen generate` (see scripts/build.sh).
+name: QuectelSerial
+options:
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    CODE_SIGN_STYLE: Automatic
+    CURRENT_PROJECT_VERSION: 2
+    MARKETING_VERSION: 0.1.0
+    CLANG_CXX_LANGUAGE_STANDARD: c++17
+targets:
+  QuectelSerialDriver:
+    type: driver-extension
+    platform: macOS
+    sources:
+      - path: Driver
+        excludes: [Info.plist, Driver.entitlements]
+    settings:
+      base:
+        SDKROOT: driverkit
+        SUPPORTED_PLATFORMS: driverkit
+        DRIVERKIT_DEPLOYMENT_TARGET: "23.0"
+        PRODUCT_BUNDLE_IDENTIFIER: space.linuxgemini.quectel-serial.driver
+        PRODUCT_NAME: space.linuxgemini.quectel-serial.driver
+        INFOPLIST_FILE: Driver/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Driver/Driver.entitlements
+        IIG_FRAMEWORK_NAME: QuectelSerialDriver
+        GCC_ENABLE_CPP_EXCEPTIONS: NO
+        GCC_ENABLE_CPP_RTTI: NO
+        ENABLE_HARDENED_RUNTIME: YES
+    dependencies:
+      - sdk: DriverKit.framework
+      - sdk: USBDriverKit.framework
+      - sdk: SerialDriverKit.framework
+  QuectelSerialInstaller:
+    type: application
+    platform: macOS
+    sources:
+      - path: Installer
+        excludes: [Info.plist, Installer.entitlements]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: space.linuxgemini.quectel-serial
+        PRODUCT_NAME: QuectelSerial
+        INFOPLIST_FILE: Installer/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Installer/Installer.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_VERSION: "5.0"
+    dependencies:
+      - target: QuectelSerialDriver
+        embed: true
+        codeSign: true
+      - sdk: SystemExtensions.framework
+schemes:
+  QuectelSerial:
+    build:
+      targets:
+        QuectelSerialInstaller: all

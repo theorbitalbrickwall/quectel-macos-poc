@@ -1,0 +1,71 @@
+// SPDX-License-Identifier: CC0-1.0
+import Foundation
+
+/// A byte stream to the modem's AT port.
+public protocol ByteTransport: AnyObject {
+    func write(_ data: Data) throws
+    /// Returns whatever arrived within `timeout`; empty data means nothing did.
+    func read(timeout: TimeInterval) throws -> Data
+    func close()
+}
+
+public enum ModemError: Error, LocalizedError, Equatable {
+    case timeout(String)
+    case notFound(String)
+    case io(String)
+    case rejected(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .timeout(let command): return "No response to \(command)"
+        case .notFound(let what): return what
+        case .io(let what): return what
+        case .rejected(let what): return what
+        }
+    }
+}
+
+public struct ATResponse: Equatable {
+    public var lines: [String]
+    public var ok: Bool
+
+    /// Everything except the final result line.
+    public var body: [String] { Array(lines.dropLast()) }
+}
+
+/// Sends one AT command at a time and collects the lines up to the final result.
+public final class ATChannel {
+    public let transport: ByteTransport
+    private var buffer = Data()
+
+    public init(transport: ByteTransport) {
+        self.transport = transport
+    }
+
+    public func command(_ text: String, timeout: TimeInterval = 5) throws -> ATResponse {
+        while try !transport.read(timeout: 0.05).isEmpty {}  // drop stale URCs
+        buffer = Data()
+        try transport.write(Data((text + "\r").utf8))
+        let deadline = Date().addingTimeInterval(timeout)
+        var lines: [String] = []
+        while Date() < deadline {
+            buffer.append(try transport.read(timeout: min(0.2, max(0.01, deadline.timeIntervalSinceNow))))
+            while let newline = buffer.firstIndex(of: 0x0A) {
+                let raw = Data(buffer[buffer.startIndex..<newline])
+                buffer = Data(buffer[buffer.index(after: newline)...])
+                let line = String(decoding: raw, as: UTF8.self)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if line.isEmpty || (line == text && lines.isEmpty) { continue }  // blank or echo
+                lines.append(line)
+                if ATParser.isFinal(line) {
+                    return ATResponse(lines: lines, ok: line == "OK")
+                }
+            }
+        }
+        throw ModemError.timeout(text)
+    }
+
+    public func close() {
+        transport.close()
+    }
+}

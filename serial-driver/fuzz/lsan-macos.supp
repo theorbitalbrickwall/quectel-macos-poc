@@ -1,0 +1,2 @@
+# libFuzzer's own memory-limit thread, never freed. Not driver code.
+leak:fuzzer::StartRssThread
