@@ -27,10 +27,9 @@ sudo apt-get install clang libclang-rt-18-dev
 
 On macOS you need an LLVM clang, version 22, from any source (MacPorts,
 Homebrew, llvm.org). Xcode's clang does not include libFuzzer, and the
-AddressSanitizer of clang 19 hangs at start on macOS 27. `run.sh` looks for
-`clang++` in `PATH`, then Homebrew's `llvm`, then MacPorts `clang++-mp-22`,
-and takes the first one that has libFuzzer. Only the MacPorts one has been
-tried. To choose the compiler yourself:
+AddressSanitizer of clang 19 hangs at start on macOS 27. `run.sh` takes the
+first of `clang++` in `PATH`, Homebrew's `llvm` and MacPorts `clang++-mp-22`
+that has libFuzzer. To choose the compiler yourself:
 
 ```bash
 CXX=/path/to/clang++ serial-driver/fuzz/run.sh 60
@@ -54,10 +53,9 @@ serial-driver/fuzz/run.sh --replay serial-driver/fuzz/build/crash-FILE
 
 ## Limits
 
-- The fake DriverKit is how Claude Fable 5.2 (the LLM that wrote it) understands
-  Apple's frameworks, written from the public headers. A clean run says the driver logic is consistent with that
-  model. It says nothing about real macOS or a real modem. Finding 3 below
-  is an example of what the model missed.
+- The fake DriverKit was written from Apple's public headers. A clean run
+  says the driver logic is consistent with that model, nothing about real
+  macOS or a real modem. Regression 3 below is an example of what it missed.
 - `shim/QuectelSerial*.h` replace the headers that Apple's `iig` tool
   generates. When a method is added to a `.iig` file, add it there too.
 - One thread only. Real DriverKit runs both classes on one dispatch queue, so
@@ -74,19 +72,12 @@ Bit 0 of the first input byte selects the mode:
 Bit 3 additionally lets the completion of an aborted transfer arrive after
 the next kernel call instead of before it.
 
-## Findings so far
+## Regressions
 
-`regressions/` holds the inputs. All are fixed; `run.sh` replays them first.
+`regressions/` holds one input per fixed bug; `run.sh` replays them first.
 
-1. A failed transmit submit dropped one 4096 byte chunk and then stopped.
-   The rest of the client's data stayed in the ring until the next write.
-2. If a transmit completion from the previous open arrived after the port was
-   reopened and written to, the new data was never sent.
-
-3. The transmit buffer was created with `kIOMemoryDirectionOut` only.
-   DriverKit maps such a buffer read-only in the driver, so the first write
-   to a port crashed. This one was found on real hardware, not by the fuzzer:
-   the fake DriverKit did not model it. It does now, and the input is kept so
-   the mistake cannot come back.
-
-The fuzzer itself found no memory safety problem.
+1. A failed transmit submit dropped one chunk and stalled the rest.
+2. A transmit completion from the previous open, arriving after a reopen,
+   stalled the new data.
+3. The transmit buffer was mapped read-only, so the first write crashed.
+   Found on hardware, not by the fuzzer; the fake DriverKit now models it.

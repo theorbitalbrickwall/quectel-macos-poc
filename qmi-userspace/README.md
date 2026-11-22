@@ -5,8 +5,7 @@ script talks QMI to the modem through libusb and copies IP packets between the
 modem and a `utun` interface (the interface type VPN apps use).
 
 Never run against a real modem. The QMI logic and the packet path are tested
-against a simulated modem, including pings through a real tunnel interface on
-Linux; the macOS `utun` code and the libusb code are untested.
+against a simulated modem; the macOS `utun` code and the libusb code are not.
 
 ## Setup
 
@@ -43,12 +42,11 @@ sudo python3 quectel_qmi.py connect --apn internet --default-route --set-dns
   half-default routes (`0.0.0.0/1`, `128.0.0.0/1`) instead of replacing your
   default route; they vanish when the tool exits.
 - `--set-dns` (macOS) publishes the carrier's DNS servers while connected.
-  This is the part Claude Fable 5.2 (the LLM that wrote this tool) is least sure
-  about; if names do not resolve, set the DNS
+  This is the least certain part; if names do not resolve, set the DNS
   servers printed in the log manually.
 - Ctrl-C disconnects cleanly.
-- `-v` prints every QMI frame in hex. Please include that output when
-  something fails; it is what is needed to fix it.
+- `-v` prints every QMI frame in hex. Include that output when reporting a
+  failure.
 
 The same script works on Linux (it takes the interface away from `qmi_wwan`
 while running), which is a quick way to check the QMI part with your modem

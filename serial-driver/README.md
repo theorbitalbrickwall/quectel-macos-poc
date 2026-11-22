@@ -4,8 +4,8 @@ Publishes the vendor-specific serial interfaces of a Quectel modem as normal
 serial ports, so you can send AT commands (for example to switch the USB
 network mode) from macOS.
 
-Lightly tested on one EC25-EUX (macOS 27, Apple silicon): the ports appear and
-answer AT commands. Read [Status in the top-level README](../README.md#status).
+Lightly tested on one EC25-EUX; see
+[Status in the top-level README](../README.md#status).
 
 ## Fastest path: no driver
 
@@ -61,10 +61,8 @@ If the AT port is not USB interface 2 on your module or mode, pass
   provisions; distributing to other Macs needs an Apple-approved grant for
   vendor ID 0x2c7c.
 
-Without a paid team the usual workaround is disabling SIP, running
-`systemextensionsctl developer on` and ad-hoc signing. This was not tried, and
-it is unknown whether it still works on current macOS; use the libusb script
-instead.
+Without a paid team, use the libusb script instead. The usual workaround
+(SIP off, `systemextensionsctl developer on`, ad-hoc signing) was not tried.
 
 ### Build and install
 
@@ -119,11 +117,11 @@ Which driver, if any, is attached to each interface:
 ioreg -p IOUSB -l -w0 | less
 ```
 
-Most likely problems, since this code has met only one modem:
+Most likely problems on another modem:
 
-- No ports appear: the interface descriptors differ from what Claude Fable 5.2
-  (the LLM that wrote the driver) assumed (`ff/00/00`). Check `bInterfaceClass/SubClass/Protocol` in the `ioreg` output
-  and adjust the `QuectelSerial` personality in `Driver/Info.plist`.
+- No ports appear: the interface descriptors are not `ff/00/00`. Check
+  `bInterfaceClass/SubClass/Protocol` in the `ioreg` output and adjust the
+  `QuectelSerial` personality in `Driver/Info.plist`.
 - Ports appear but the modem never answers: check the log for failed
   transfers, and try the modem port (`/dev/cu.quectel3`).
 

@@ -5,7 +5,7 @@ modem, not only as a USB Ethernet dongle in ECM mode.
 
 Reusing Apple's own cellular stack is not viable (see
 [Feasibility](#feasibility)), so this repository holds three independent
-proofs of concept to try on real hardware:
+proofs of concept:
 
 | Folder | What it is | Needs |
 | --- | --- | --- |
@@ -13,98 +13,66 @@ proofs of concept to try on real hardware:
 | [`modem-gui/`](modem-gui/) | Two apps over AT commands: a menu bar app (signal, operator, APN, USB mode) and a debug window (live AT log, command list). They leave the data connection alone | Xcode command line tools |
 | [`serial-driver/`](serial-driver/) | DriverKit driver publishing the AT ports as `/dev/cu.quectel*`, plus an AT command script that also works without the driver | Paid Apple Developer team for the driver; nothing for the script |
 
-A few things have been run on a Mac with a modem attached: the `--status` poll
-of `modem-gui`, and read-only AT commands through the serial driver. See
-[Status](#status) for exactly what was and was not verified.
-
 Suggested order for testing: `serial-driver/tools/quectel_at.py --usb ATI`
 first (proves USB access works at all), then `modem-gui` with `--status`, then
 `qmi-userspace`.
 
 ## Feasibility
 
-### 1. Reusing Apple's cellular stack (AppleWWANSupport / CoreWWAN): no
+| Approach | Verdict |
+| --- | --- |
+| Apple's cellular stack (AppleWWANSupport / CoreWWAN) | No |
+| DriverKit MBIM driver that shows up as Ethernet | Possible, not worth it |
+| Userspace QMI over libusb and `utun` | Yes: [`qmi-userspace/`](qmi-userspace/) |
+| Serial port driver for the AT interfaces | Yes: [`serial-driver/`](serial-driver/) |
 
-- The WWAN support is a private Apple kext with a built-in vendor list, which is
-  what blocked the earlier attempt. Changing that list means modifying an Apple
-  kext: SIP off, an unsealed system volume, and on Apple silicon a reduced
-  security boot policy. It has to be redone after every macOS update.
-- A third-party "codeless" kext that only injects matching entries (the approach
-  of [karnadii/FibocomModem](https://github.com/karnadii/FibocomModem)) has the
-  same kext restrictions. That project also reports that from Ventura on the
-  modem is still detected but the WWAN configuration UI is gone, so even a
-  successful match gives you a service you cannot configure. Claude Fable 5.2 found only
-  this one report and no Apple statement, so treat it as likely rather than proven.
-- DriverKit, the supported driver model, has no cellular/WWAN family. A driver
-  extension cannot register a device with CoreWWAN.
+**Apple's cellular stack.** The WWAN support is a private Apple kext with a
+built-in vendor list. Changing the list, or injecting matches with a codeless
+kext as [karnadii/FibocomModem](https://github.com/karnadii/FibocomModem)
+does, needs SIP off and reduced boot security, after every macOS update. That
+project also reports that the WWAN configuration UI is gone from Ventura on
+(one report, no Apple statement). DriverKit has no cellular family.
 
-### 2. A DriverKit MBIM driver that shows up as Ethernet: possible, not worth it
-
+**DriverKit MBIM driver.**
 [jquirke/AQC111Driver](https://github.com/jquirke/AQC111Driver) shows that a
-USB network driver built on USBDriverKit + NetworkingDriverKit works on current
-macOS, so an MBIM driver is technically possible. It was not written because:
+USB network driver on DriverKit works. But macOS would still see an Ethernet
+adapter: no signal bars, no APN UI, the same experience as ECM. The driver
+would have to fake Ethernet headers, answer ARP and neighbour discovery,
+implement MBIM, and Apple would have to approve the entitlements. The only
+gains are no double NAT and the carrier IP. Whether macOS has its own MBIM
+class driver is unknown; no evidence of one was found.
 
-- macOS would still see an Ethernet adapter, not a cellular modem. No signal
-  bars, no APN UI. This is the same user experience as ECM mode.
-- MBIM carries raw IP packets, while `IOUserNetworkEthernet` wants Ethernet
-  frames. The driver would have to fake Ethernet headers and answer ARP and
-  IPv6 neighbour discovery itself, implement the MBIM control protocol (open,
-  PIN, register, attach, connect) and NTB framing, and a helper would have to
-  apply the IP configuration.
-- Distribution needs the USB transport and networking entitlements approved by
-  Apple.
+**Userspace QMI.** The EC25 sends raw IP packets in QMI mode and macOS has a
+raw-IP interface type (`utun`), so a normal program can run the whole
+connection without a driver or entitlements. macOS shows a VPN-like interface
+instead of a "Cellular" service, and packets pass through userspace.
 
-The only gains over ECM are no double NAT and direct access to the carrier IP.
-
-One thing Claude Fable 5.2 could not determine: whether macOS ships its own MBIM
-class driver. It found no evidence that it does. You can check in two minutes:
-switch the modem to MBIM (`usbnet` 2), replug, and look at whether any driver
-attaches to the MBIM interface:
-
-```bash
-ioreg -p IOUSB -l -w0 | less
-```
-
-### 3. Userspace QMI (or MBIM) over libusb and `utun`: yes
-
-The EC25 sends raw IP packets in QMI mode and macOS has a raw-IP interface
-type (`utun`), so a normal program can run the whole connection: no driver, no
-Apple entitlements. The price is that macOS shows a VPN-like interface instead
-of a "Cellular" service, and packets pass through userspace. See
-[`qmi-userspace/`](qmi-userspace/).
-
-### 4. A serial port driver for the AT interfaces: yes
-
-The EC25's AT ports are vendor-specific USB interfaces, so Apple's CDC ACM
-driver ignores them. SerialDriverKit supports exactly this case. The driver in
-[`serial-driver/`](serial-driver/) publishes them as `/dev/cu.quectel*`, which
-is enough to send `AT+QCFG="usbnet",1` and switch to ECM without a Linux or
-Windows machine. The same folder has a script that does the switch with no
-driver at all, through libusb.
-
-The modem port (`/dev/cu.quectel3`) also accepts PPP dial-up (`ATD*99#`), which
-is the closest thing to "a modem as a modem" that macOS still allows, provided
-your macOS version still ships `pppd`. Not tested.
+**Serial port driver.** The AT ports are vendor-specific USB interfaces, so
+Apple's CDC ACM driver ignores them; SerialDriverKit covers this case. The
+ports are enough to switch the modem to ECM without a Linux or Windows
+machine. The modem port also accepts PPP dial-up (`ATD*99#`), if your macOS
+still ships `pppd`.
 
 ## Status
 
-| Item | State |
-| --- | --- |
-| `qmi-userspace`: QMI protocol, connect flow, packet path | Tested against a simulated modem (17 tests), including pings through a real tunnel interface on Linux |
-| `qmi-userspace`: libusb access, macOS `utun`, routes and DNS setup | Written, never run |
-| `modem-gui`: AT parsing and modem logic | Unit-tested on a GitHub macOS 15 runner (see the "Build and test" workflow) and on macOS 27 with Xcode 27 (24 tests) |
-| `modem-gui`: direct USB access | `--status` ran once on an M1 Max (macOS 27) against an EC25-EUX without a SIM, in ECM mode, as a normal user without `sudo`. It printed plausible values. No other command was tried. With the serial driver installed, `--status` also works through `/dev/cu.quectel2`. With a SIM (registered on LTE, ECM connection in use) `--status` through the driver's port gave correct operator, band, registration, APN and IP address. The raw `AT+QCSQ` SINR was 250 while `AT+QENG="servingcell"` reported 28 dB, so `--status` now converts it (value / 5 - 20) and showed 28 dB when `QENG` also said 28 |
-| `modem-gui`: menu bar UI | Compiles; never run |
-| `modem-gui`: debug window (`QuectelDebug`) | Monitor and command list are unit-tested. `--run` works on the EC25-EUX through `/dev/cu.quectel2` and `3`, and a second program on the same port is refused. In the window, connect, disconnect, changing the port and sending read-only commands from the list work. Commands that change the modem, typed commands, Save Log and direct USB (no driver) are not tested |
-| `serial-driver/tools/quectel_at.py`, serial transport | Tested against a fake modem on a pseudo-terminal (7 tests). `ATI` and `usbnet` (read only) work through the driver's ports on the EC25-EUX. With a SIM, 33 read-only queries (module, SIM, network, data, USB, GNSS and SMS settings) all answered `OK` on `/dev/cu.quectel2` while the ECM connection stayed up. Switching the mode is not tested |
-| `quectel_at.py`, raw USB transport | Written, never run against hardware |
-| `serial-driver` driver and installer | Compile unsigned on the runner and on macOS 27 with Xcode 27 (DriverKit 27.0 SDK). The development-signed build also succeeds there, with the DriverKit entitlements provisioned by Xcode. Installed on an M1 Max (macOS 27) with an EC25-EUX: the driver loads and `/dev/cu.quectel1`, `2` and `3` appear. The first build crashed on the first write to a port (read-only transmit buffer). After the fix, `ATI` and `AT+QCFG="usbnet"` get correct answers on `/dev/cu.quectel2` and `ATI` on `/dev/cu.quectel3`, with no new crash. The NMEA port opens and closes cleanly (GNSS was off, so no data was read). NMEA data, PPP, unplugging while open and long sessions are not tested |
-| `serial-driver` driver logic | Fuzzed on Linux against a fake DriverKit ([`serial-driver/fuzz/`](serial-driver/fuzz/)); two stalls found and fixed, no memory errors. It missed the read-only transmit buffer crash that the hardware test found; the fake now models that case. This tests the logic against a fake DriverKit that Claude Fable 5.2 wrote from the public headers, not against real macOS |
+Hardware means one EC25-EUX on an M1 Max with macOS 27, in ECM mode.
 
-The protocol details (QMI message layouts, the EC25's USB interface layout and
-its raw-IP-only behaviour) come from what Claude Fable 5.2 knows about the Linux drivers and
-libqmi, not from a capture of your modem. Expect to need a round of fixes; the
-`-v` output of `quectel_qmi.py` is the most useful thing to send back.
+| Item | Without hardware | On hardware |
+| --- | --- | --- |
+| `qmi-userspace` | 17 tests against a simulated modem, including pings through a real tunnel on Linux | Never run |
+| `modem-gui`: `ModemKit` | 24 unit tests | |
+| `modem-gui`: `QuectelMenu --status` | | Works through the driver's port (with a SIM, on LTE) and over direct USB (without a SIM) |
+| `modem-gui`: menu bar UI and controls | Compiles | Never run |
+| `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | `--run`, the exclusive open, connect, disconnect, changing the port and read-only commands work. Not tested: commands that change the modem, typed commands, Save Log, direct USB |
+| `quectel_at.py`, serial port | 7 tests against a fake modem | Read-only queries work through the driver's ports. Switching the mode is not tested |
+| `quectel_at.py`, raw USB | | Never run |
+| `serial-driver`: driver and installer | Compiles unsigned and development-signed; logic fuzzed against a fake DriverKit | Loads; `/dev/cu.quectel1`, `2` and `3` appear; AT commands work on 2 and 3; the NMEA port opens. Not tested: NMEA data, PPP, unplugging while open, long sessions |
+
+The protocol details (QMI message layouts, the USB interface layout, raw IP
+in QMI mode) come from the Linux drivers and libqmi, not from a capture of
+this modem. The AT commands were checked against Quectel's manuals. For
+`qmi-userspace`, expect a round of fixes; its `-v` output is the most useful
+thing to report.
 
 ## Other files
 

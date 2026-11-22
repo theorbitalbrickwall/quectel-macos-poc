@@ -16,9 +16,8 @@ the menu.
 Controls: set the APN, switch the USB network mode (with a reboot), send a raw
 AT command.
 
-Only `--status` has been run against a real modem (an EC25-EUX without a SIM,
-on macOS 27). The menu bar UI and the controls have not. The AT parsing and
-modem logic are unit-tested.
+Only `--status` has been run against a real modem; the menu bar UI and the
+controls have not.
 
 ### Run
 
@@ -73,9 +72,7 @@ swift run -c release QuectelDebug --port /dev/cu.quectel2 --run ATI
 Not included (QNavigator has them): SMS and call screens, TCP/IP tests,
 firmware download.
 
-Tested on one EC25-EUX: `--run` on ports 2 and 3, the exclusive open, and in
-the window: connect, disconnect, changing the port, and sending read-only
-commands from the list. Not tested: the triangle and pencil commands, typed commands and
+Not tested on hardware: the triangle and pencil commands, typed commands and
 history, Save Log, and direct USB without the driver.
 
 ## How the apps reach the modem
@@ -85,19 +82,14 @@ history, Save Log, and direct USB without the driver.
 2. Otherwise they open the modem's USB interface directly through Apple's
    IOUSBHost framework (interface 2 for the menu bar app).
 
-On macOS 27 a normal user could open the USB interface this way, without
-`sudo`. Other macOS versions are not tested. If `--status` fails with "Cannot
-open the modem's USB interface", try it once with `sudo`.
+On macOS 27 this works without `sudo`. If `--status` fails with "Cannot open
+the modem's USB interface", try it once with `sudo`.
 
 ## Notes
 
-- SINR comes from `AT+QCSQ` and is converted to dB as value / 5 - 20. The
-  manual (AT Commands V2.2) says the value is already in dB, but its own
-  example shows 192, and the EC25-EUX reported 248 while
-  `AT+QENG="servingcell"` (documented range -20 to +30 dB) reported 27. The
-  formula is the usual Quectel one; the manual does not state it. On the
-  EC25-EUX it gave 28 dB when `QENG` also said 28, and 30 dB at another
-  moment when `QENG` said 27 to 28.
+- SINR comes from `AT+QCSQ`, which reports 0 to 250, and is converted to dB
+  as value / 5 - 20. The manual does not state this formula; on the EC25-EUX
+  the result agrees with `AT+QENG="servingcell"` to within about 2 dB.
 - The APN change applies to the first PDP context and takes effect the next
   time the modem attaches.
 
