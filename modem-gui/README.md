@@ -91,8 +91,13 @@ open the modem's USB interface", try it once with `sudo`.
 
 ## Notes
 
-- SINR is shown exactly as the modem reports it in `AT+QCSQ`. The manual says
-  the unit is dB; some Quectel firmware reports a scaled value instead.
+- SINR comes from `AT+QCSQ` and is converted to dB as value / 5 - 20. The
+  manual (AT Commands V2.2) says the value is already in dB, but its own
+  example shows 192, and the EC25-EUX reported 248 while
+  `AT+QENG="servingcell"` (documented range -20 to +30 dB) reported 27. The
+  formula is the usual Quectel one; the manual does not state it. On the
+  EC25-EUX it gave 28 dB when `QENG` also said 28, and 30 dB at another
+  moment when `QENG` said 27 to 28.
 - The APN change applies to the first PDP context and takes effect the next
   time the modem attaches.
 

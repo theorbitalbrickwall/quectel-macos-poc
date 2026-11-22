@@ -34,8 +34,14 @@ public struct SignalQuality: Equatable {
     public var mode: String
     public var rssi: Int?
     public var rsrp: Int?   // LTE only
-    public var sinr: Int?   // LTE only, as reported by the modem
+    public var sinr: Int?   // LTE only, raw value: steps of 0.2 dB above -20 dB
     public var rsrq: Int?   // LTE only
+
+    /// SINR in dB. The manual gives `sinr` in dB, but modems report 0...250;
+    /// this is the usual Quectel conversion, which the manual does not state.
+    public var sinrDB: Int? {
+        sinr.map { Int((Double($0) / 5 - 20).rounded()) }
+    }
 
     /// 0...4, from RSRP on LTE and RSSI otherwise.
     public var bars: Int {

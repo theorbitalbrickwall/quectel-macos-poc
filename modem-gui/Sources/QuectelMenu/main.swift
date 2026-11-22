@@ -27,7 +27,7 @@ func describe(_ status: ModemStatus) -> [String] {
         var parts: [String] = []
         if let value = signal.rsrp { parts.append("RSRP \(value) dBm") }
         if let value = signal.rsrq { parts.append("RSRQ \(value) dB") }
-        if let value = signal.sinr { parts.append("SINR \(value)") }
+        if let value = signal.sinrDB { parts.append("SINR \(value) dB") }
         if let value = signal.rssi { parts.append("RSSI \(value) dBm") }
         lines.append("Signal: " + (parts.isEmpty ? signal.mode : parts.joined(separator: ", ")))
     }

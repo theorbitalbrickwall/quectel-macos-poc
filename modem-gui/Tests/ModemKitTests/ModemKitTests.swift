@@ -59,6 +59,9 @@ final class ParserTests: XCTestCase {
     func testSignalPerMode() {
         let lte = ATParser.signal(["+QCSQ: \"LTE\",-67,-95,15,-10"])
         XCTAssertEqual(lte, SignalQuality(mode: "LTE", rssi: -67, rsrp: -95, sinr: 15, rsrq: -10))
+        XCTAssertEqual(lte?.sinrDB, -17)
+        XCTAssertEqual(SignalQuality(mode: "LTE", sinr: 248).sinrDB, 30)
+        XCTAssertNil(SignalQuality(mode: "GSM", rssi: -70).sinrDB)
         XCTAssertEqual(lte?.bars, 3)
         let wcdma = ATParser.signal(["+QCSQ: \"WCDMA\",-104,-110,-9"])
         XCTAssertEqual(wcdma, SignalQuality(mode: "WCDMA", rssi: -104))
@@ -269,7 +272,7 @@ final class MonitorTests: XCTestCase {
             XCTAssertFalse(entry.summary.isEmpty, entry.command)
         }
         // Anything that reboots or powers down must ask first.
-        for command in ["AT+CFUN=1,1", "AT+QPOWD", "AT+CFUN=4"] {
+        for command in ["AT+CFUN=1,1", "AT+QPOWD", "AT+CFUN=4", "AT+CFUN=0"] {
             XCTAssertEqual(entries.first { $0.command == command }?.kind, .action, command)
         }
     }
