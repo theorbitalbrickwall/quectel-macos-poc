@@ -17,6 +17,22 @@ func openModem() throws -> Modem {
     return Modem(channel: ATChannel(transport: transport))
 }
 
+/// Icon for alerts. A program that is not an app bundle gets the generic
+/// folder icon otherwise.
+func appIcon() -> NSImage? {
+    let style = NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
+        .applying(NSImage.SymbolConfiguration(paletteColors: [.systemBlue]))
+    return NSImage(systemSymbolName: "antenna.radiowaves.left.and.right",
+                   accessibilityDescription: "Modem")?.withSymbolConfiguration(style)
+}
+
+/// An alert with our icon. `NSApp.applicationIconImage` does not reach alerts.
+func makeAlert() -> NSAlert {
+    let alert = NSAlert()
+    if let icon = appIcon() { alert.icon = icon }
+    return alert
+}
+
 func describe(_ status: ModemStatus) -> [String] {
     var lines: [String] = []
     if let name = status.operatorName?.best, !name.isEmpty { lines.append("Operator: \(name)") }
@@ -24,12 +40,15 @@ func describe(_ status: ModemStatus) -> [String] {
         lines.append("Network: \(network.technology), \(network.band)")
     }
     if let signal = status.signal {
-        var parts: [String] = []
-        if let value = signal.rsrp { parts.append("RSRP \(value) dBm") }
-        if let value = signal.rsrq { parts.append("RSRQ \(value) dB") }
-        if let value = signal.sinrDB { parts.append("SINR \(value) dB") }
-        if let value = signal.rssi { parts.append("RSSI \(value) dBm") }
-        lines.append("Signal: " + (parts.isEmpty ? signal.mode : parts.joined(separator: ", ")))
+        // Two short lines: received power, then quality (LTE only).
+        var power: [String] = []
+        if let value = signal.rsrp { power.append("RSRP \(value) dBm") }
+        if let value = signal.rssi { power.append("RSSI \(value) dBm") }
+        lines.append("Signal: " + (power.isEmpty ? signal.mode : power.joined(separator: ", ")))
+        var quality: [String] = []
+        if let value = signal.rsrq { quality.append("RSRQ \(value) dB") }
+        if let value = signal.sinrDB { quality.append("SINR \(value) dB") }
+        if !quality.isEmpty { lines.append("Quality: " + quality.joined(separator: ", ")) }
     }
     if let registration = status.registration { lines.append("Registration: \(registration.label)") }
     if let sim = status.sim { lines.append("SIM: \(sim)") }
@@ -146,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func ask(_ message: String, detail: String, value: String) -> String? {
-        let alert = NSAlert()
+        let alert = makeAlert()
         alert.messageText = message
         alert.informativeText = detail
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
@@ -160,7 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func show(_ message: String, detail: String) {
-        let alert = NSAlert()
+        let alert = makeAlert()
         alert.messageText = message
         alert.informativeText = detail
         NSApp.activate(ignoringOtherApps: true)
@@ -180,7 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func setMode(_ sender: NSMenuItem) {
         guard let mode = USBNetMode(rawValue: sender.tag), mode != status?.usbNetMode else { return }
-        let alert = NSAlert()
+        let alert = makeAlert()
         alert.messageText = "Switch the modem to \(mode.label)?"
         alert.informativeText = "The modem reboots and the current data connection drops. "
             + "macOS only has a built-in network driver for ECM."

@@ -118,6 +118,22 @@ func mark(for kind: ATCatalogEntry.Kind, size: CGFloat = 15) -> NSAttributedStri
     return NSAttributedString(attachment: attachment)
 }
 
+/// Icon for alerts and the Dock. A program that is not an app bundle gets the generic
+/// folder icon otherwise.
+func appIcon() -> NSImage? {
+    let style = NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
+        .applying(NSImage.SymbolConfiguration(paletteColors: [.systemBlue]))
+    return NSImage(systemSymbolName: "antenna.radiowaves.left.and.right",
+                   accessibilityDescription: "Modem")?.withSymbolConfiguration(style)
+}
+
+/// An alert with our icon. `NSApp.applicationIconImage` does not reach alerts.
+func makeAlert() -> NSAlert {
+    let alert = NSAlert()
+    if let icon = appIcon() { alert.icon = icon }
+    return alert
+}
+
 /// A row of the command list: a group title or one command.
 final class CatalogNode: NSObject {
     let title: String
@@ -158,6 +174,7 @@ final class DebugController: NSObject, NSApplicationDelegate, NSOutlineViewDataS
     // ------------------------------------------------------------ set-up
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.applicationIconImage = appIcon()
         buildMenu()
         buildWindow()
         rescan()
@@ -451,7 +468,7 @@ final class DebugController: NSObject, NSApplicationDelegate, NSOutlineViewDataS
             input.stringValue = entry.command
             window.makeFirstResponder(input)
         case .action:
-            let alert = NSAlert()
+            let alert = makeAlert()
             alert.messageText = "Send \(entry.command)?"
             alert.informativeText = entry.summary + ". This changes the modem's state."
             alert.addButton(withTitle: "Send")

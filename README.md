@@ -62,7 +62,7 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27, in ECM mode.
 | `qmi-userspace` | 17 tests against a simulated modem, including pings through a real tunnel on Linux | Never run |
 | `modem-gui`: `ModemKit` | 24 unit tests | |
 | `modem-gui`: `QuectelMenu --status` | | Works through the driver's port (with a SIM, on LTE) and over direct USB (without a SIM) |
-| `modem-gui`: menu bar UI and controls | Compiles | Never run |
+| `modem-gui`: menu bar UI and controls | Compiles | The menu shows the status and **Send AT command** works. Setting the APN and the USB mode is not tested |
 | `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | `--run`, the exclusive open, connect, disconnect, changing the port and read-only commands work. Not tested: commands that change the modem, typed commands, Save Log, direct USB |
 | `quectel_at.py`, serial port | 7 tests against a fake modem | Read-only queries work through the driver's ports. Switching the mode is not tested |
 | `quectel_at.py`, raw USB | | Never run |

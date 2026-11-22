@@ -16,8 +16,8 @@ the menu.
 Controls: set the APN, switch the USB network mode (with a reboot), send a raw
 AT command.
 
-Only `--status` has been run against a real modem; the menu bar UI and the
-controls have not.
+On a real modem, `--status` works, the menu shows the status and **Send AT
+command** works. Setting the APN and the USB mode has not been tried.
 
 ### Run
 
