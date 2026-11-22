@@ -77,5 +77,10 @@ manuals, not from a capture of the user's device.
 ## Conventions
 
 - Python: standard library only, plus `pyusb` for USB access.
-- Keep the READMEs short and in plain English.
+- Keep the READMEs short and in plain English. They describe the current
+  state, not how it was reached: say what works and what is still untested,
+  and leave test history, per-command results and fixed bugs to the commit
+  messages. The Status table has one short row per item. Do not add
+  "Claude found/assumed" asides to the body text; the Credits section covers
+  authorship and is not to be shortened.
 - User-facing docs put each shell command in its own fenced block.
