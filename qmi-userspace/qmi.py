@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: CC0-1.0
 """Minimal QMI protocol implementation: message codec and a blocking client.
 
-Only what is needed to bring up an IPv4 data session and read basic status.
+Only what is needed to bring up a data session and read basic status.
 No USB code lives here; the client talks to anything that offers
 
     send_control(data: bytes) -> None
@@ -26,6 +26,7 @@ WDS_START_NETWORK = 0x0020
 WDS_STOP_NETWORK = 0x0021
 WDS_GET_PACKET_SERVICE_STATUS = 0x0022
 WDS_GET_RUNTIME_SETTINGS = 0x002D
+WDS_SET_IP_FAMILY = 0x004D
 DMS_GET_MANUFACTURER = 0x0021
 DMS_GET_MODEL = 0x0022
 DMS_GET_REVISION = 0x0023
@@ -158,6 +159,10 @@ def ipv4(raw):
     return str(ipaddress.IPv4Address(struct.unpack("<I", raw[:4])[0]))
 
 
+def ipv6(raw):
+    return str(ipaddress.IPv6Address(raw[:16]))
+
+
 def text(raw):
     return raw.decode("utf-8", "replace").rstrip("\x00").strip()
 
@@ -185,6 +190,7 @@ class QmiClient:
         self.transport = transport
         self.log = log or (lambda message: None)
         self.clients = {}            # service -> client id
+        self.extra_clients = []      # (service, client id) from allocate(extra=True)
         self.transaction = 0
         self.pending = {}            # (service, transaction) -> Queue
         self.lock = threading.Lock()
@@ -218,18 +224,23 @@ class QmiClient:
             if waiter is not None:
                 waiter.put(message)
 
-    def request(self, service, message_id, tlvs=(), timeout=5.0):
-        """Send a request and return the response TLVs; raise on QMI errors."""
-        if service != CTL and service not in self.clients:
+    def request(self, service, message_id, tlvs=(), timeout=5.0, client=None):
+        """Send a request and return the response TLVs; raise on QMI errors.
+
+        `client` selects a client ID from allocate(extra=True); by default the
+        one client per service is used and allocated on first use.
+        """
+        if client is None and service != CTL and service not in self.clients:
             self.allocate(service)
+        if client is None:
+            client = self.clients.get(service, 0)
         with self.lock:
             self.transaction = self.transaction % 0xFF + 1 if service == CTL \
                 else self.transaction % 0xFFFF + 1
             transaction = self.transaction
             waiter = queue.Queue(1)
             self.pending[(service, transaction)] = waiter
-        frame = encode_message(service, self.clients.get(service, 0), transaction,
-                               message_id, tlvs)
+        frame = encode_message(service, client, transaction, message_id, tlvs)
         self.transport.send_control(frame)
         try:
             message = waiter.get(timeout=timeout)
@@ -245,10 +256,14 @@ class QmiClient:
             raise QmiError(service, message_id, code, message.tlvs)
         return message.tlvs
 
-    def allocate(self, service):
+    def allocate(self, service, extra=False):
+        """Get a client ID. `extra` asks for one more, next to the default one."""
         tlvs = self.request(CTL, CTL_GET_CLIENT_ID, [(0x01, bytes([service]))])
-        self.clients[service] = tlvs[0x01][1]
-        return self.clients[service]
+        if extra:
+            self.extra_clients.append((service, tlvs[0x01][1]))
+        else:
+            self.clients[service] = tlvs[0x01][1]
+        return tlvs[0x01][1]
 
     def sync(self):
         """Ask the modem to drop client IDs left behind by a previous run."""
@@ -258,13 +273,14 @@ class QmiClient:
             pass
 
     def close(self):
-        for service, client in list(self.clients.items()):
+        for service, client in self.extra_clients + list(self.clients.items()):
             try:
                 self.request(CTL, CTL_RELEASE_CLIENT_ID,
                              [(0x01, bytes([service, client]))], timeout=2.0)
             except Exception:
                 pass
-            self.clients.pop(service, None)
+        self.extra_clients.clear()
+        self.clients.clear()
         self.running = False
         self.reader.join(timeout=2)
 
@@ -337,10 +353,14 @@ class QmiClient:
         raw = self.request(WDS, WDS_GET_PACKET_SERVICE_STATUS).get(0x01, b"\x00")
         return CONNECTION_STATUS.get(raw[0], str(raw[0]))
 
+    def set_ip_family(self, family, client=None):
+        """Bind a WDS client to IPv4 (4) or IPv6 (6). One client serves one family."""
+        self.request(WDS, WDS_SET_IP_FAMILY, [(0x01, bytes([family]))], client=client)
+
     def start_network(self, apn=None, username=None, password=None, auth=None,
-                      profile=None, timeout=60.0):
-        """Start the IPv4 data session and return the packet data handle."""
-        tlvs = [(0x19, bytes([4]))]
+                      profile=None, timeout=60.0, family=4, client=None):
+        """Start a data session and return the packet data handle."""
+        tlvs = [(0x19, bytes([family]))]
         if apn:
             tlvs.append((0x14, apn.encode()))
         if username:
@@ -352,7 +372,8 @@ class QmiClient:
         if profile is not None:
             tlvs.append((0x31, bytes([profile])))
         try:
-            response = self.request(WDS, WDS_START_NETWORK, tlvs, timeout=timeout)
+            response = self.request(WDS, WDS_START_NETWORK, tlvs, timeout=timeout,
+                                    client=client)
         except QmiError as error:
             reason = error.tlvs.get(0x11)
             if reason and len(reason) >= 4:
@@ -361,13 +382,14 @@ class QmiClient:
             raise
         return struct.unpack("<I", response[0x01])[0]
 
-    def stop_network(self, handle):
+    def stop_network(self, handle, client=None):
         self.request(WDS, WDS_STOP_NETWORK, [(0x01, struct.pack("<I", handle))],
-                     timeout=30.0)
+                     timeout=30.0, client=client)
 
-    def runtime_settings(self):
+    def runtime_settings(self, client=None):
+        """Settings of the client's session: IPv4 keys, or the "...6" keys."""
         tlvs = self.request(WDS, WDS_GET_RUNTIME_SETTINGS,
-                            [(0x10, struct.pack("<I", RUNTIME_SETTINGS_MASK))])
+                            [(0x10, struct.pack("<I", RUNTIME_SETTINGS_MASK))], client=client)
         settings = {"dns": []}
         for key, tlv in (("address", 0x1E), ("gateway", 0x20), ("netmask", 0x21)):
             if tlv in tlvs:
@@ -375,6 +397,13 @@ class QmiClient:
         for tlv in (0x15, 0x16):
             if tlv in tlvs and ipv4(tlvs[tlv]) != "0.0.0.0":
                 settings["dns"].append(ipv4(tlvs[tlv]))
+        for key, tlv in (("address6", 0x25), ("gateway6", 0x26)):
+            if len(tlvs.get(tlv, b"")) >= 17:
+                settings[key] = ipv6(tlvs[tlv])
+                settings.setdefault("prefix6", tlvs[tlv][16])
+        for tlv in (0x27, 0x28):
+            if len(tlvs.get(tlv, b"")) >= 16 and any(tlvs[tlv][:16]):
+                settings["dns"].append(ipv6(tlvs[tlv]))
         if 0x29 in tlvs:
             settings["mtu"] = struct.unpack("<I", tlvs[0x29][:4])[0]
         if 0x14 in tlvs:

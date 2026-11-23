@@ -4,8 +4,7 @@ Brings up a cellular data connection over QMI without any driver. A Python
 script talks QMI to the modem through libusb and copies IP packets between the
 modem and a `utun` interface (the interface type VPN apps use).
 
-On a real modem, `info` and the data session over USB work. The macOS `utun`
-interface, the routes and the DNS set-up are not tested; see
+Works on a real modem; see
 [Status in the top-level README](../README.md#status).
 
 ## Setup
@@ -37,12 +36,15 @@ sudo python3 quectel_qmi.py connect --apn internet --default-route --set-dns
 ```
 
 - Without `--apn` the modem's default profile is used.
-- `--default-route` sends all IPv4 traffic through the modem. It adds two
-  half-default routes (`0.0.0.0/1`, `128.0.0.0/1`) instead of replacing your
-  default route; they vanish when the tool exits.
-- `--set-dns` (macOS) publishes the carrier's DNS servers while connected.
-  This is the least certain part; if names do not resolve, set the DNS
-  servers printed in the log manually.
+- `--ipv6` adds an IPv6 session next to the IPv4 one. The profile must have
+  the type `IPV4V6`; list the profiles with `quectel_at.py 'AT+CGDCONT?'` and
+  choose one with `--profile N`. If the network refuses IPv6, the tool carries
+  on with IPv4.
+- `--default-route` sends all traffic through the modem. It adds two
+  half-default routes (`0.0.0.0/1`, `128.0.0.0/1`, and `::/1`, `8000::/1` with
+  `--ipv6`) instead of replacing your default route; they vanish when the
+  tool exits.
+- `--set-dns` (macOS) puts the carrier's DNS servers first while connected.
 - Ctrl-C disconnects cleanly.
 - `-v` prints every QMI frame in hex. Include that output when reporting a
   failure.
@@ -53,7 +55,8 @@ before trying macOS.
 
 ## Limits
 
-- IPv4 only.
+- Without `--ipv6`, IPv6 traffic keeps using your other connection, if it
+  has IPv6.
 - One instance at a time; a second one cannot claim the USB interface.
 - SIM PIN is not handled; disable it or enter it with
   `quectel_at.py 'AT+CPIN="1234"'` first.

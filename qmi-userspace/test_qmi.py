@@ -20,10 +20,16 @@ import qmi
 import quectel_qmi
 
 ADDRESS, GATEWAY = "10.170.23.5", "10.170.23.6"
+ADDRESS6, GATEWAY6, DNS6 = "2001:db8:1:2::5", "2001:db8:1:2::1", "2001:db8::53"
+HANDLE, HANDLE6 = 0x1234ABCD, 0x66660006
 
 
 def le_ip(address):
     return struct.pack("<I", int(ipaddress.IPv4Address(address)))
+
+
+def raw_ip6(address):
+    return ipaddress.IPv6Address(address).packed
 
 
 def checksum(data):
@@ -38,13 +44,15 @@ def checksum(data):
 class FakeModem:
     """Answers QMI requests and replies to ICMP echo requests on the data path."""
 
-    def __init__(self, registered=True, raw_ip=True, call_fails=False):
+    def __init__(self, registered=True, raw_ip=True, call_fails=False, ipv6=True):
         self.control = queue.Queue()
         self.data = queue.Queue()
         self.registered, self.raw_ip, self.call_fails = registered, raw_ip, call_fails
-        self.clients = {}
+        self.ipv6 = ipv6
+        self.clients = {}            # service -> list of client ids
+        self.families = {}           # WDS client id -> 6, when bound to IPv6
         self.next_client = 1
-        self.connected = False
+        self.connected = self.connected6 = False
         self.requests = []
         self.uplink = []
 
@@ -78,20 +86,29 @@ class FakeModem:
     def handle(self, message):
         key = (message.service, message.message_id)
         tlvs = message.tlvs
-        if message.service != qmi.CTL and self.clients.get(message.service) != message.client:
+        if (message.service != qmi.CTL
+                and message.client not in self.clients.get(message.service, [])):
             return self.failure(0x0005)
+        six = self.families.get(message.client) == 6
         if key == (qmi.CTL, qmi.CTL_SYNC):
             self.clients.clear()
-            self.connected = False
+            self.families.clear()
+            self.connected = self.connected6 = False
             return []
         if key == (qmi.CTL, qmi.CTL_GET_CLIENT_ID):
             service = tlvs[0x01][0]
-            self.clients[service] = self.next_client
+            self.clients.setdefault(service, []).append(self.next_client)
             self.next_client += 1
-            return [(0x01, bytes([service, self.clients[service]]))]
+            return [(0x01, bytes([service, self.next_client - 1]))]
         if key == (qmi.CTL, qmi.CTL_RELEASE_CLIENT_ID):
-            self.clients.pop(tlvs[0x01][0], None)
+            service, client = tlvs[0x01]
+            self.clients[service].remove(client)
+            if not self.clients[service]:
+                del self.clients[service]
             return [(0x01, tlvs[0x01])]
+        if key == (qmi.WDS, qmi.WDS_SET_IP_FAMILY):
+            self.families[message.client] = tlvs[0x01][0]
+            return []
         if key == (qmi.WDA, qmi.WDA_SET_DATA_FORMAT):
             wanted = struct.unpack("<I", tlvs[0x11])[0]
             return [(0x11, struct.pack("<I", wanted if self.raw_ip else 1))]
@@ -106,21 +123,33 @@ class FakeModem:
         if key == (qmi.NAS, qmi.NAS_GET_SIGNAL_INFO):
             return [(0x14, struct.pack("<bbhh", -67, -9, -95, 132))]
         if key == (qmi.WDS, qmi.WDS_START_NETWORK):
-            if self.call_fails:
+            if self.call_fails or tlvs[0x19][0] != (6 if six else 4):
                 return self.failure(0x000E, [(0x11, struct.pack("<HH", 6, 33))])
+            if six:
+                if not self.ipv6:
+                    return self.failure(0x000E, [(0x11, struct.pack("<HH", 2, 210))])
+                self.connected6 = True
+                return [(0x01, struct.pack("<I", HANDLE6))]
             self.connected = True
             self.apn = tlvs.get(0x14, b"").decode()
-            return [(0x01, struct.pack("<I", 0x1234ABCD))]
+            return [(0x01, struct.pack("<I", HANDLE))]
         if key == (qmi.WDS, qmi.WDS_STOP_NETWORK):
-            if struct.unpack("<I", tlvs[0x01])[0] != 0x1234ABCD:
+            if struct.unpack("<I", tlvs[0x01])[0] != (HANDLE6 if six else HANDLE):
                 return self.failure(0x0009)
-            self.connected = False
+            if six:
+                self.connected6 = False
+            else:
+                self.connected = False
             return []
         if key == (qmi.WDS, qmi.WDS_GET_PACKET_SERVICE_STATUS):
             return [(0x01, bytes([2 if self.connected else 1]))]
         if key == (qmi.WDS, qmi.WDS_GET_RUNTIME_SETTINGS):
-            if not self.connected:
+            if not (self.connected6 if six else self.connected):
                 return self.failure(0x000F)
+            if six:
+                return [(0x25, raw_ip6(ADDRESS6) + b"\x40"), (0x26, raw_ip6(GATEWAY6) + b"\x40"),
+                        (0x27, raw_ip6(DNS6)), (0x28, bytes(16)),
+                        (0x29, struct.pack("<I", 1430))]
             return [(0x1E, le_ip(ADDRESS)), (0x20, le_ip(GATEWAY)),
                     (0x21, le_ip("255.255.255.252")), (0x15, le_ip("9.9.9.9")),
                     (0x16, le_ip("0.0.0.0")), (0x29, struct.pack("<I", 1430)),
@@ -252,6 +281,23 @@ class ClientTest(unittest.TestCase):
         self.client.stop_network(handle)
         self.assertFalse(self.modem.connected)
 
+    def test_ipv6_session_on_a_second_client(self):
+        handle = self.client.start_network(apn="internet")
+        client6 = self.client.allocate(qmi.WDS, extra=True)
+        self.assertNotEqual(client6, self.client.clients[qmi.WDS])
+        self.client.set_ip_family(6, client6)
+        handle6 = self.client.start_network(apn="internet", family=6, client=client6)
+        self.assertEqual(self.client.runtime_settings(client6),
+                         {"dns": [DNS6], "address6": ADDRESS6, "prefix6": 64,
+                          "gateway6": GATEWAY6, "mtu": 1430})
+        self.assertEqual(self.client.runtime_settings()["address"], ADDRESS)
+        self.client.stop_network(handle6, client6)
+        self.assertTrue(self.modem.connected, "stopping IPv6 must leave IPv4 up")
+        self.assertFalse(self.modem.connected6)
+        self.client.stop_network(handle)
+        self.client.close()
+        self.assertEqual(self.modem.clients, {})
+
     def test_one_client_id_per_service_and_release(self):
         self.client.signal()
         self.client.serving_system()
@@ -282,7 +328,7 @@ class ClientTest(unittest.TestCase):
 
 def arguments(**overrides):
     values = dict(apn="internet", user=None, password=None, auth=None, profile=None,
-                  default_route=False, set_dns=False, configure=True,
+                  ipv6=False, default_route=False, set_dns=False, configure=True,
                   registration_timeout=1, report_interval=3600)
     values.update(overrides)
     return types.SimpleNamespace(**values)
@@ -339,6 +385,28 @@ class ConnectFlowTest(unittest.TestCase):
         self.assertTrue(default_route)
         self.assertFalse(modem.connected, "session must be stopped on exit")
         self.assertTrue(watchdog.is_alive(), "should exit on the indication, not the watchdog")
+        self.assertNotIn("address6", settings)
+
+    def run_briefly(self, modem, tunnel, **overrides):
+        stop = threading.Event()
+        threading.Timer(1.5, stop.set).start()
+        self.assertEqual(self.run_connect(modem, tunnel, stop, **overrides), 0)
+        return tunnel.configured[0]
+
+    def test_ipv6_adds_a_second_session(self):
+        modem, tunnel = FakeModem(), RecordingTunnel()
+        settings = self.run_briefly(modem, tunnel, ipv6=True)
+        self.assertEqual((settings["address"], settings["address6"], settings["prefix6"]),
+                         (ADDRESS, ADDRESS6, 64))
+        self.assertEqual(settings["dns"], ["9.9.9.9", DNS6])
+        self.assertFalse(modem.connected or modem.connected6, "both sessions must be stopped")
+
+    def test_ipv6_refused_by_the_network_keeps_ipv4(self):
+        modem, tunnel = FakeModem(ipv6=False), RecordingTunnel()
+        settings = self.run_briefly(modem, tunnel, ipv6=True)
+        self.assertEqual(settings["address"], ADDRESS)
+        self.assertNotIn("address6", settings)
+        self.assertFalse(modem.connected)
 
 
 @unittest.skipUnless(sys.platform == "linux" and os.geteuid() == 0

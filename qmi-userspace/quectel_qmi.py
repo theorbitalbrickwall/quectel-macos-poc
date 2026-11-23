@@ -97,6 +97,12 @@ class Utun:
             # without replacing it, and disappear together with the interface.
             for network in ("0.0.0.0/1", "128.0.0.0/1"):
                 run(["route", "-n", "add", "-net", network, "-interface", self.name])
+        if "address6" in settings:
+            run(["ifconfig", self.name, "inet6", settings["address6"],
+                 "prefixlen", str(settings["prefix6"])])
+            if default_route:
+                for network in ("::/1", "8000::/1"):
+                    run(["route", "-n", "add", "-inet6", network, "-interface", self.name])
 
 
 class LinuxTun:
@@ -125,6 +131,12 @@ class LinuxTun:
         if default_route:
             for network in ("0.0.0.0/1", "128.0.0.0/1"):
                 run(["ip", "route", "add", network, "dev", self.name])
+        if "address6" in settings:
+            run(["ip", "-6", "addr", "add",
+                 f"{settings['address6']}/{settings['prefix6']}", "dev", self.name])
+            if default_route:
+                for network in ("::/1", "8000::/1"):
+                    run(["ip", "-6", "route", "add", network, "dev", self.name])
 
 
 def open_tunnel():
@@ -140,7 +152,10 @@ def set_dns(servers):
     """macOS only: publish the carrier's DNS servers through configd."""
     if sys.platform != "darwin" or not servers:
         return False
+    # The empty match domain makes this a resolver for every name; without it
+    # macOS ignores a DNS entry whose service has no IPv4 entry.
     script = (f"d.init\nd.add ServerAddresses * {' '.join(servers)}\n"
+              f"d.add SupplementalMatchDomains * \"\"\n"
               f"set {DNS_SERVICE_KEY}\nquit\n")
     log(f"+ scutil: set {DNS_SERVICE_KEY} to {' '.join(servers)}")
     subprocess.run(["scutil"], input=script.encode(), check=True)
@@ -358,12 +373,15 @@ def connect(client, modem, tunnel, args, stop):
     if not wait_for_registration(client, args.registration_timeout, stop):
         log("not registered on a network; check SIM, PIN (AT+CPIN?) and antenna")
         return 1
-    log(f"starting data session{f' (APN {args.apn})' if args.apn else ' (default profile)'}")
+    chosen = [f"APN {args.apn}"] if args.apn else []
+    chosen += [f"profile {args.profile}"] if args.profile is not None else []
+    log(f"starting data session ({', '.join(chosen) or 'default profile'})")
     handle = client.start_network(apn=args.apn, username=args.user, password=args.password,
                                   auth=AUTH_MODES[args.auth] if args.auth else None,
                                   profile=args.profile)
     dns_set = False
     pump = None
+    client6 = handle6 = None
     try:
         settings = client.runtime_settings()
         if "address" not in settings:
@@ -373,6 +391,30 @@ def connect(client, modem, tunnel, args, stop):
         log(f"address {settings['address']}, gateway {settings['gateway']}, "
             f"dns {' '.join(settings['dns']) or '-'}, mtu {settings.get('mtu', '?')}, "
             f"apn {settings.get('apn', '?')}")
+        if args.ipv6:
+            # IPv6 is a second session on its own WDS client; it shares the
+            # data endpoints with the IPv4 one.
+            try:
+                client6 = client.allocate(qmi.WDS, extra=True)
+                client.set_ip_family(6, client6)
+                handle6 = client.start_network(
+                    apn=args.apn, username=args.user, password=args.password,
+                    auth=AUTH_MODES[args.auth] if args.auth else None,
+                    profile=args.profile, family=6, client=client6)
+                settings6 = client.runtime_settings(client6)
+                if "address6" in settings6:
+                    settings.update({key: settings6[key]
+                                     for key in ("address6", "prefix6", "gateway6")
+                                     if key in settings6})
+                    settings["dns"] += settings6["dns"]
+                    log(f"IPv6 address {settings['address6']}/{settings['prefix6']}, "
+                        f"dns {' '.join(settings6['dns']) or '-'}")
+                else:
+                    log(f"modem reported no IPv6 address: {settings6}")
+            except (qmi.QmiError, qmi.QmiTimeout) as error:
+                log(f"no IPv6, continuing with IPv4 only: {error}")
+                log("the profile in use must have the type IPV4V6 (AT+CGDCONT?); "
+                    "pick one with --profile")
         if args.configure:
             tunnel.configure(settings, args.default_route)
             if args.set_dns:
@@ -386,8 +428,12 @@ def connect(client, modem, tunnel, args, stop):
                 if (indication.service == qmi.WDS
                         and indication.message_id == qmi.WDS_GET_PACKET_SERVICE_STATUS
                         and indication.tlvs.get(0x01, b"\x02")[0] == 1):
-                    log("the network ended the data session")
-                    stop.set()
+                    if client6 is not None and indication.client == client6:
+                        log("the network ended the IPv6 session; IPv4 stays up")
+                        handle6 = None
+                    else:
+                        log("the network ended the data session")
+                        stop.set()
             if client.reader_error is not None:
                 stop.set()
             if not stop.is_set() and time.monotonic() >= next_report:
@@ -402,6 +448,11 @@ def connect(client, modem, tunnel, args, stop):
             pump.join()
         if dns_set:
             clear_dns()
+        if handle6 is not None:
+            try:
+                client.stop_network(handle6, client6)
+            except Exception as error:
+                log(f"stopping the IPv6 session failed: {error}")
         try:
             client.stop_network(handle)
             log("data session stopped")
@@ -438,8 +489,10 @@ def main(argv=None):
     up.add_argument("--password")
     up.add_argument("--auth", choices=sorted(AUTH_MODES))
     up.add_argument("--profile", type=int, help="3GPP profile index (as in AT+CGDCONT)")
+    up.add_argument("--ipv6", action="store_true",
+                    help="also start an IPv6 session (the profile must allow IPv6)")
     up.add_argument("--default-route", action="store_true",
-                    help="send all IPv4 traffic through the modem")
+                    help="send all traffic through the modem")
     up.add_argument("--set-dns", action="store_true",
                     help="macOS: use the carrier's DNS servers while connected")
     up.add_argument("--no-configure", dest="configure", action="store_false",
