@@ -55,9 +55,10 @@ before trying macOS.
 
 ## Limits
 
-- Without `--ipv6`, IPv6 traffic keeps using your other connection, if it
-  has IPv6.
-- One instance at a time; a second one cannot claim the USB interface.
+- Without `--ipv6`, IPv6 traffic is routed through whatever other interface
+  has working IPv6.
+- One modem and one instance at a time; a second instance cannot claim the
+  USB interface.
 - SIM PIN is not handled; disable it or enter it with
   `quectel_at.py 'AT+CPIN="1234"'` first.
 - macOS shows a `utun` interface, not a "Cellular" service.

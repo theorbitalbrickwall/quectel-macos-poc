@@ -17,6 +17,9 @@ Suggested order for testing: `serial-driver/tools/quectel_at.py --usb ATI`
 first (proves USB access works at all), then `modem-gui` with `--status`, then
 `qmi-userspace`.
 
+Everything here assumes that one modem is plugged in. With two, the tools
+cannot tell them apart.
+
 ## Feasibility
 
 | Approach | Verdict |
