@@ -191,6 +191,14 @@ class CodecTest(unittest.TestCase):
             with self.assertRaises((ValueError, struct.error)):
                 qmi.decode_message(frame[:cut])
 
+    def test_operator_name_plain_and_gsm7_packed(self):
+        self.assertEqual(qmi.operator_name(b"Fake Mobile"), "Fake Mobile")
+        # As sent by an EC25-EUX: 8 characters packed into 7 bytes.
+        self.assertEqual(qmi.operator_name(bytes.fromhex("d4ba7c3d2eb3d9")), "Turkcell")
+        # 7 characters in 7 bytes leave one empty septet at the end.
+        self.assertEqual(qmi.operator_name(bytes.fromhex("d4ba7c3d2eb301")), "Turkcel")
+        self.assertEqual(qmi.operator_name(b""), "")
+
     def test_ipv4_is_little_endian(self):
         self.assertEqual(qmi.ipv4(bytes([5, 23, 170, 10])), "10.170.23.5")
 

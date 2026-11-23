@@ -6,7 +6,7 @@ Two transports:
   * a serial port (--port, or /dev/cu.quectel2 when the driver is installed);
     standard library only.
   * raw USB through libusb (--usb, or automatically when no port exists);
-    needs no driver at all, only `brew install libusb` and `pip install pyusb`.
+    needs no driver at all, only libusb and pyusb.
 
 Examples:
   quectel_at.py ATI
@@ -66,7 +66,8 @@ class UsbTransport:
             import usb.core
             import usb.util
         except ImportError:
-            sys.exit("pyusb is missing: brew install libusb && pip3 install pyusb")
+            sys.exit("pyusb is missing: install libusb and pyusb with your package "
+                     "manager (pyusb is also on PyPI)")
         self.usb = usb
         find = {"idVendor": VENDOR_ID}
         if product is not None:
@@ -100,7 +101,12 @@ class UsbTransport:
                 self.device.detach_kernel_driver(interface)
         except (NotImplementedError, usb.core.USBError):
             pass
-        usb.util.claim_interface(self.device, interface)
+        try:
+            usb.util.claim_interface(self.device, interface)
+        except usb.core.USBError as error:
+            sys.exit(f"cannot claim USB interface {interface}: {error}\n"
+                     "Another program or a driver has it open. With the serial driver "
+                     "installed, drop --usb and use its port instead.")
         self._line_state(True)
 
     def _line_state(self, on):

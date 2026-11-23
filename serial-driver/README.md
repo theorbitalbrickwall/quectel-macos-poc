@@ -11,15 +11,12 @@ Lightly tested on one EC25-EUX; see
 
 `tools/quectel_at.py` can talk to the AT interface directly through libusb.
 macOS attaches no driver to these interfaces, so nothing has to be installed
-or signed:
+or signed. This path is not tested, and cannot be used while the driver
+below is installed.
 
-```bash
-brew install libusb
-```
-
-```bash
-pip3 install pyusb
-```
+It needs [libusb](https://libusb.info) and
+[pyusb](https://github.com/pyusb/pyusb). Install them with your package
+manager; pyusb is also on PyPI.
 
 ```bash
 python3 tools/quectel_at.py --usb usbnet
@@ -53,7 +50,7 @@ If the AT port is not USB interface 2 on your module or mode, pass
 ### Requirements
 
 - macOS 14 or later, full Xcode, and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-  (`brew install xcodegen`).
+  (the `xcodegen` package of your package manager).
 - A paid Apple Developer team. DriverKit entitlements (`driverkit`,
   `driverkit.family.serial`, `driverkit.transport.usb`) are only issued through
   Apple provisioning profiles. For development on your own registered Mac the

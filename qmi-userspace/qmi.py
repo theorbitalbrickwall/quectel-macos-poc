@@ -162,6 +162,20 @@ def text(raw):
     return raw.decode("utf-8", "replace").rstrip("\x00").strip()
 
 
+GSM7_ALPHABET = ("@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ\x1bÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?"
+                 "¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà")
+
+
+def operator_name(raw):
+    """Decode a network name: plain ASCII, or packed GSM 7-bit (seen on EC25)."""
+    if all(0x20 <= byte < 0x7F for byte in raw.rstrip(b"\x00")):
+        return text(raw)
+    bits = int.from_bytes(raw, "little")
+    name = "".join(GSM7_ALPHABET[(bits >> shift) & 0x7F]
+                   for shift in range(0, len(raw) * 8 - 6, 7))
+    return name.rstrip("@\r").strip()
+
+
 # --- client ----------------------------------------------------------------
 
 class QmiClient:
@@ -281,7 +295,7 @@ class QmiClient:
         if raw and len(raw) >= 5:
             mcc, mnc, length = struct.unpack_from("<HHB", raw)
             system["plmn"] = f"{mcc:03d}{mnc:02d}"
-            system["operator"] = text(raw[5:5 + length])
+            system["operator"] = operator_name(raw[5:5 + length])
         raw = tlvs.get(0x10)
         if raw:
             system["roaming"] = raw[0] == 0

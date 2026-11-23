@@ -168,7 +168,8 @@ class UsbQmi:
             import usb.core
             import usb.util
         except ImportError:
-            sys.exit("pyusb is missing: brew install libusb && pip3 install pyusb")
+            sys.exit("pyusb is missing: install libusb and pyusb with your package "
+                     "manager (pyusb is also on PyPI)")
         self.usb, self.verbose = usb, verbose
         find = {"idVendor": VENDOR_ID}
         if product is not None:
@@ -208,8 +209,11 @@ class UsbQmi:
                 self.detached = True
         except (NotImplementedError, usb.core.USBError):
             pass
-        usb.util.claim_interface(self.device, self.number)
-        self._drain = False
+        try:
+            usb.util.claim_interface(self.device, self.number)
+        except usb.core.USBError as error:
+            sys.exit(f"cannot claim the QMI interface ({self.number}): {error}\n"
+                     "Another program has it open; is this tool already running?")
         self._line_state(True)
 
     def _line_state(self, on):
@@ -226,21 +230,24 @@ class UsbQmi:
         self.device.ctrl_transfer(0x21, 0x00, 0, self.number, frame, 1000)
 
     def recv_control(self, timeout):
-        # Wait for a "response available" notification, but poll anyway when
-        # none arrives so a missed notification cannot stall the client.
-        if not self._drain:
-            try:
-                self.ep_int.read(self.ep_int.wMaxPacketSize, max(1, int(timeout * 1000)))
-            except self.usb.core.USBError as error:
-                if not is_timeout(error):
-                    raise
+        # The modem sends one "response available" notification per queued
+        # frame. Only read after one: asking when nothing is queued is not
+        # refused, it blocks until the transfer times out.
+        try:
+            notification = bytes(self.ep_int.read(self.ep_int.wMaxPacketSize,
+                                                  max(1, int(timeout * 1000))))
+        except self.usb.core.USBError as error:
+            if is_timeout(error):
+                return None
+            raise
+        if notification[:2] != b"\xa1\x01":  # not RESPONSE_AVAILABLE
+            return None
         try:
             frame = bytes(self.device.ctrl_transfer(0xA1, 0x01, 0, self.number, 4096, 1000))
         except self.usb.core.USBError as error:
-            if getattr(error, "errno", None) == 19 or "no such device" in str(error).lower():
+            if not is_timeout(error):
                 raise
-            frame = b""  # a stall here just means nothing is queued
-        self._drain = bool(frame)
+            frame = b""
         if frame and self.verbose:
             log(f"qmi < {frame.hex()}")
         return frame or None
@@ -403,6 +410,7 @@ def connect(client, modem, tunnel, args, stop):
 
 
 def info(client):
+    client.sync()
     for key, value in client.device_info().items():
         log(f"{key}: {value}")
     print_status(client)

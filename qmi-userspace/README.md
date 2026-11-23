@@ -4,24 +4,23 @@ Brings up a cellular data connection over QMI without any driver. A Python
 script talks QMI to the modem through libusb and copies IP packets between the
 modem and a `utun` interface (the interface type VPN apps use).
 
-Never run against a real modem. The QMI logic and the packet path are tested
-against a simulated modem; the macOS `utun` code and the libusb code are not.
+On a real modem, `info` and the data session over USB work. The macOS `utun`
+interface, the routes and the DNS set-up are not tested; see
+[Status in the top-level README](../README.md#status).
 
 ## Setup
 
 The modem must be in RmNet/QMI mode (`AT+QCFG="usbnet",0`):
 
 ```bash
-python3 ../serial-driver/tools/quectel_at.py --usb usbnet rmnet
+python3 ../serial-driver/tools/quectel_at.py usbnet rmnet
 ```
 
-```bash
-brew install libusb
-```
+Switch back with `usbnet ecm`.
 
-```bash
-pip3 install pyusb
-```
+The tool needs [libusb](https://libusb.info) and
+[pyusb](https://github.com/pyusb/pyusb). Install them with your package
+manager; pyusb is also on PyPI.
 
 ## Use
 
@@ -55,6 +54,7 @@ before trying macOS.
 ## Limits
 
 - IPv4 only.
+- One instance at a time; a second one cannot claim the USB interface.
 - SIM PIN is not handled; disable it or enter it with
   `quectel_at.py 'AT+CPIN="1234"'` first.
 - macOS shows a `utun` interface, not a "Cellular" service.

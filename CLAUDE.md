@@ -10,9 +10,13 @@ table of what is and is not verified.
   `README.md` lists the exceptions. Never describe something as working on
   hardware unless the user reported a test result or you ran it yourself.
   Keep the Status table in `README.md` accurate when that changes.
-- Development happens on Linux without Xcode. Swift and DriverKit code can only
-  be compiled and tested through the GitHub Actions workflow
+- Development happens on Linux without Xcode, or on the user's Mac with the
+  modem plugged in. On Linux, Swift and DriverKit code can only be compiled
+  and tested through the GitHub Actions workflow
   (`.github/workflows/build.yml`, macOS runner). Push, then read the run.
+- On the Mac: `sudo` asks for a password, so ask the user to run root
+  commands. `pyusb` is not in the system Python; use a venv. The serial
+  driver is installed, so raw USB access to interfaces 1 to 3 is refused.
 - Apple framework signatures are easy to get wrong from memory. When a Swift or
   DriverKit call fails to compile, print the real header in a temporary CI step
   rather than guessing again, and remove the step afterwards.
@@ -70,9 +74,16 @@ test file). Extend the fake when adding protocol features.
 - The modem needs DTR raised (CDC SET_CONTROL_LINE_STATE) on an interface
   before it talks on it.
 - QMI data is raw IP, no aggregation.
+- QMI control: the modem sends one `a1 01` notification on the interrupt
+  endpoint per queued response. GET_ENCAPSULATED_RESPONSE with nothing queued
+  is not stalled; it blocks until the transfer times out, so never poll.
+- The operator name in NAS Get Serving System is packed GSM 7-bit.
+- A killed QMI client leaves its client IDs and data session on the modem
+  until CTL Sync.
 
-These come from the Linux `option` and `qmi_wwan` drivers and the Quectel AT
-manuals, not from a capture of the user's device.
+The first four come from the Linux `option` and `qmi_wwan` drivers and the
+Quectel AT manuals; the interface layout, raw IP and the last three were
+seen on the user's EC25-EUX.
 
 ## Conventions
 
@@ -84,3 +95,5 @@ manuals, not from a capture of the user's device.
   "Claude found/assumed" asides to the body text; the Credits section covers
   authorship and is not to be shortened.
 - User-facing docs put each shell command in its own fenced block.
+- Docs and messages name the package to install (libusb, pyusb, XcodeGen),
+  not a package manager command for it.

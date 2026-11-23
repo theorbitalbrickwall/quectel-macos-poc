@@ -55,24 +55,23 @@ still ships `pppd`.
 
 ## Status
 
-Hardware means one EC25-EUX on an M1 Max with macOS 27, in ECM mode.
+Hardware means one EC25-EUX on an M1 Max with macOS 27.
 
 | Item | Without hardware | On hardware |
 | --- | --- | --- |
-| `qmi-userspace` | 17 tests against a simulated modem, including pings through a real tunnel on Linux | Never run |
+| `qmi-userspace` | 18 tests against a simulated modem, including pings through a real tunnel on Linux | `info` and the data session over USB work. Not tested: the `utun` interface, routes and DNS set-up |
 | `modem-gui`: `ModemKit` | 24 unit tests | |
 | `modem-gui`: `QuectelMenu --status` | | Works through the driver's port (with a SIM, on LTE) and over direct USB (without a SIM) |
 | `modem-gui`: menu bar UI and controls | Compiles | The menu shows the status and **Send AT command** works. Setting the APN and the USB mode is not tested |
 | `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | `--run`, the exclusive open, connect, disconnect, changing the port and read-only commands work. Not tested: commands that change the modem, typed commands, Save Log, direct USB |
-| `quectel_at.py`, serial port | 7 tests against a fake modem | Read-only queries work through the driver's ports. Switching the mode is not tested |
-| `quectel_at.py`, raw USB | | Never run |
+| `quectel_at.py`, serial port | 7 tests against a fake modem | Read-only queries and switching the mode work through the driver's ports |
+| `quectel_at.py`, raw USB | | Not tested. Cannot be used while the driver is installed |
 | `serial-driver`: driver and installer | Compiles unsigned and development-signed; logic fuzzed against a fake DriverKit | Loads; `/dev/cu.quectel1`, `2` and `3` appear; AT commands work on 2 and 3; the NMEA port opens. Not tested: NMEA data, PPP, unplugging while open, long sessions |
 
 The protocol details (QMI message layouts, the USB interface layout, raw IP
-in QMI mode) come from the Linux drivers and libqmi, not from a capture of
-this modem. The AT commands were checked against Quectel's manuals. For
-`qmi-userspace`, expect a round of fixes; its `-v` output is the most useful
-thing to report.
+in QMI mode) come from the Linux drivers and libqmi. The AT commands were
+checked against Quectel's manuals. If `qmi-userspace` fails, its `-v` output
+is the most useful thing to report.
 
 ## Other files
 
