@@ -6,22 +6,25 @@ table of what is and is not verified.
 
 ## Ground rules
 
-- Almost no code here has run against a real modem; the Status table in
-  `README.md` lists the exceptions. Never describe something as working on
-  hardware unless the user reported a test result or you ran it yourself.
-  Keep the Status table in `README.md` accurate when that changes.
-- Development happens on Linux without Xcode, or on the user's Mac with the
+- The Status table in `README.md` says what has run against a real modem and
+  what has not. Never describe something as working on hardware unless the
+  user reported a test result or you ran it yourself. Keep the table accurate
+  when that changes.
+- Development happens either on Linux without Xcode or on a Mac with the
   modem plugged in. On Linux, Swift and DriverKit code can only be compiled
   and tested through the GitHub Actions workflow
   (`.github/workflows/build.yml`, macOS runner). Push, then read the run.
-- On the Mac: `sudo` asks for a password, so ask the user to run root
-  commands. `pyusb` is not in the system Python; use a venv. The serial
-  driver is installed, so raw USB access to interfaces 1 to 3 is refused.
+- On a Mac with the modem, test on the hardware yourself. Root is needed for
+  `quectel_qmi.py connect`; if `sudo` is not available to you, give the user
+  the command to run. While the serial driver is installed, raw USB access to
+  interfaces 1 to 3 is refused. Put the modem back in the USB mode and
+  profile settings you found it in, unless the user says otherwise.
 - Apple framework signatures are easy to get wrong from memory. When a Swift or
   DriverKit call fails to compile, print the real header in a temporary CI step
   rather than guessing again, and remove the step afterwards.
-- The user tests on hardware and reports back. Ask for `quectel_qmi.py -v`
-  output (QMI frames in hex) or `log stream` output when something fails.
+- Without access to the hardware, the user tests and reports back. Ask for
+  `quectel_qmi.py -v` output (QMI frames in hex) or `log stream` output when
+  something fails.
 
 ## Layout
 

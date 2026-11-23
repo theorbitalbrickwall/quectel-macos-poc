@@ -66,7 +66,7 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27.
 | `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | `--run`, the exclusive open, connect, disconnect, changing the port and read-only commands work. Not tested: commands that change the modem, typed commands, Save Log, direct USB |
 | `quectel_at.py`, serial port | 7 tests against a fake modem | Read-only queries and switching the mode work through the driver's ports |
 | `quectel_at.py`, raw USB | | Not tested. Cannot be used while the driver is installed |
-| `serial-driver`: driver and installer | Compiles unsigned and development-signed; logic fuzzed against a fake DriverKit | Loads; `/dev/cu.quectel1`, `2` and `3` appear; AT commands work on 2 and 3; the NMEA port opens. Not tested: NMEA data, PPP, unplugging while open, long sessions |
+| `serial-driver`: driver and installer | Compiles unsigned and development-signed; logic fuzzed against a fake DriverKit | Loads; `/dev/cu.quectel1`, `2` and `3` appear; AT commands work on 2 and 3, also thousands in a row; NMEA data arrives on 1. Not tested: PPP, unplugging while open |
 
 The protocol details (QMI message layouts, the USB interface layout, raw IP
 in QMI mode) come from the Linux drivers and libqmi. The AT commands were
