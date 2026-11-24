@@ -36,6 +36,9 @@ sudo python3 quectel_qmi.py connect --apn internet --default-route --set-dns
 ```
 
 - Without `--apn` the modem's default profile is used.
+- `--user NAME` and `--password SECRET` set the APN login. Other users of the
+  machine can read a password given on the command line (process list, shell
+  history, sudo log); `--ask-password` prompts for it instead.
 - `--ipv6` adds an IPv6 session next to the IPv4 one. The profile must have
   the type `IPV4V6`; list the profiles with `quectel_at.py 'AT+CGDCONT?'` and
   choose one with `--profile N`. If the network refuses IPv6, the tool carries
@@ -47,7 +50,9 @@ sudo python3 quectel_qmi.py connect --apn internet --default-route --set-dns
 - `--set-dns` (macOS) puts the carrier's DNS servers first while connected.
 - Ctrl-C disconnects cleanly.
 - `-v` prints every QMI frame in hex. Include that output when reporting a
-  failure.
+  failure. The `--user` and `--password` values are replaced by asterisks in
+  it. It still contains the IMEI (with `info`), the APN and the IP addresses
+  of the session.
 
 The same script works on Linux (it takes the interface away from `qmi_wwan`
 while running), which is a quick way to check the QMI part with your modem

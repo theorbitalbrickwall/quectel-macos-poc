@@ -154,6 +154,29 @@ def decode_message(frame):
                    decode_tlvs(payload[offset:offset + size]))
 
 
+def redact_credentials(frame):
+    """Return a copy of a QMUX frame that can be logged.
+
+    In a WDS Start Network message the user name and password (TLVs 0x17 and
+    0x18) are overwritten with asterisks; the lengths stay, so the copy still
+    decodes. Any other frame is returned as it is.
+    """
+    # 6 bytes of QMUX header, then flags, transaction, message ID and length.
+    if (len(frame) < 13 or frame[0] != 0x01 or frame[4] != WDS
+            or struct.unpack_from("<H", frame, 9)[0] != WDS_START_NETWORK):
+        return frame
+    copy = bytearray(frame)
+    offset = 13
+    while offset + 3 <= len(copy):
+        kind, length = struct.unpack_from("<BH", copy, offset)
+        offset += 3
+        if kind in (0x17, 0x18):
+            end = min(offset + length, len(copy))
+            copy[offset:end] = b"*" * (end - offset)
+        offset += length
+    return bytes(copy)
+
+
 def ipv4(raw):
     """QMI stores IPv4 addresses as little-endian integers."""
     return str(ipaddress.IPv4Address(struct.unpack("<I", raw[:4])[0]))

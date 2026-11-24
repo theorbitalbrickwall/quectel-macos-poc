@@ -13,6 +13,7 @@ The modem must be in RmNet/QMI mode:  AT+QCFG="usbnet",0
 """
 import argparse
 import fcntl
+import getpass
 import os
 import select
 import signal
@@ -241,7 +242,8 @@ class UsbQmi:
 
     def send_control(self, frame):
         if self.verbose:
-            log(f"qmi > {frame.hex()}")
+            # Only the logged copy loses the APN user name and password.
+            log(f"qmi > {qmi.redact_credentials(frame).hex()}")
         self.device.ctrl_transfer(0x21, 0x00, 0, self.number, frame, 1000)
 
     def recv_control(self, timeout):
@@ -486,7 +488,12 @@ def main(argv=None):
     up = commands.add_parser("connect", help="start a data session (needs root)")
     up.add_argument("--apn")
     up.add_argument("--user")
-    up.add_argument("--password")
+    secret = up.add_mutually_exclusive_group()
+    secret.add_argument("--password",
+                        help="APN password; other users can read it in the process "
+                             "list, so prefer --ask-password")
+    secret.add_argument("--ask-password", action="store_true",
+                        help="prompt for the APN password instead")
     up.add_argument("--auth", choices=sorted(AUTH_MODES))
     up.add_argument("--profile", type=int, help="3GPP profile index (as in AT+CGDCONT)")
     up.add_argument("--ipv6", action="store_true",
@@ -503,6 +510,13 @@ def main(argv=None):
 
     if args.command == "connect" and os.geteuid() != 0:
         sys.exit("connect needs root (tunnel interface, addresses and routes): use sudo")
+    if args.command == "connect" and args.ask_password:
+        # Typed here, the password stays out of the process list, the shell
+        # history and sudo's log.
+        try:
+            args.password = getpass.getpass("APN password: ")
+        except (EOFError, KeyboardInterrupt):
+            sys.exit("\nno APN password entered")
 
     tunnel = open_tunnel() if args.command == "connect" else None
     modem = UsbQmi(args.product, args.verbose)

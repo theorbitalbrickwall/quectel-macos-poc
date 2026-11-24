@@ -5,15 +5,20 @@
 The tunnel test creates a real tun interface and pings through it; it needs
 Linux and root and is skipped elsewhere.
 """
+import contextlib
+import getpass
+import io
 import ipaddress
 import os
 import queue
+import signal
 import struct
 import subprocess
 import sys
 import threading
 import types
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import qmi
@@ -231,6 +236,26 @@ class CodecTest(unittest.TestCase):
     def test_ipv4_is_little_endian(self):
         self.assertEqual(qmi.ipv4(bytes([5, 23, 170, 10])), "10.170.23.5")
 
+    def test_redaction_hides_only_the_credentials(self):
+        tlvs = [(0x19, b"\x04"), (0x14, b"corp"), (0x17, b"alice"), (0x18, b"S3cret"),
+                (0x16, b"\x02")]
+        frame = qmi.encode_message(qmi.WDS, 7, 0x0102, qmi.WDS_START_NETWORK, tlvs)
+        hidden = qmi.redact_credentials(frame)
+        self.assertEqual(hidden, qmi.encode_message(
+            qmi.WDS, 7, 0x0102, qmi.WDS_START_NETWORK,
+            [(0x19, b"\x04"), (0x14, b"corp"), (0x17, b"*****"), (0x18, b"******"),
+             (0x16, b"\x02")]))
+        self.assertEqual(len(hidden), len(frame))
+        # The same message ID or TLV numbers mean something else elsewhere.
+        for other in (qmi.encode_message(qmi.WDA, 7, 1, qmi.WDA_SET_DATA_FORMAT, tlvs),
+                      qmi.encode_message(qmi.WDS, 7, 1, qmi.WDS_STOP_NETWORK, tlvs),
+                      qmi.encode_message(qmi.CTL, 0, 1, qmi.CTL_GET_CLIENT_ID, [(0x01, b"\x01")]),
+                      qmi.encode_message(qmi.WDS, 7, 1, qmi.WDS_START_NETWORK, tlvs[:2]),
+                      b"", b"\x01\x02"):
+            self.assertEqual(qmi.redact_credentials(other), other)
+        # A cut-off password does not escape.
+        self.assertNotIn(b"S3c", qmi.redact_credentials(frame[:-6]))
+
 
 class PacketSplitTest(unittest.TestCase):
     @staticmethod
@@ -407,6 +432,95 @@ class ConnectFlowTest(unittest.TestCase):
         self.assertEqual(settings["address"], ADDRESS)
         self.assertNotIn("address6", settings)
         self.assertFalse(modem.connected)
+
+
+class VerboseLogTest(unittest.TestCase):
+    def test_log_hides_the_credentials_the_modem_still_gets(self):
+        modem, sent, lines = FakeModem(), [], []
+
+        class Device:
+            @staticmethod
+            def ctrl_transfer(request_type, request, value, index, data, timeout):
+                sent.append(bytes(data))
+                modem.send_control(bytes(data))
+
+        transport = quectel_qmi.UsbQmi.__new__(quectel_qmi.UsbQmi)  # no USB device needed
+        transport.verbose, transport.number, transport.device = True, 4, Device()
+        transport.recv_control = modem.recv_control
+        with mock.patch.object(quectel_qmi, "log", lines.append):
+            client = make_client(transport)
+            try:
+                client.start_network(apn="corp", username="alice", password="S3cret", auth=2)
+                client.packet_status()
+            finally:
+                client.close()
+        self.assertEqual(len(lines), len(sent))
+        starts = 0
+        for line, frame in zip(lines, sent):
+            message = qmi.decode_message(frame)
+            if (message.service, message.message_id) != (qmi.WDS, qmi.WDS_START_NETWORK):
+                self.assertEqual(line, f"qmi > {frame.hex()}")
+                continue
+            starts += 1
+            self.assertEqual((message.tlvs[0x17], message.tlvs[0x18]), (b"alice", b"S3cret"))
+            shown = qmi.decode_message(bytes.fromhex(line[len("qmi > "):]))
+            self.assertEqual((shown.tlvs[0x17], shown.tlvs[0x18]), (b"*****", b"******"))
+            self.assertEqual({kind: value for kind, value in shown.tlvs.items()
+                              if kind not in (0x17, 0x18)},
+                             {0x19: b"\x04", 0x14: b"corp", 0x16: b"\x02"})
+        self.assertEqual(starts, 1)
+        for secret in (b"alice", b"S3cret"):
+            self.assertNotIn(secret.hex(), "".join(lines))
+
+
+class PasswordOptionTest(unittest.TestCase):
+    """Where `connect` takes the APN password from. No modem, tunnel or root."""
+
+    def run_main(self, *options, typed=None):
+        """Run main() up to connect() and return the arguments connect() got."""
+        self.prompt = mock.Mock(side_effect=[typed])
+        self.open_tunnel = mock.Mock()
+        connect = mock.Mock(return_value=0)
+        fakes = [(os, "geteuid", lambda: 0), (signal, "signal", mock.Mock()),
+                 (getpass, "getpass", self.prompt), (qmi, "QmiClient", mock.Mock()),
+                 (quectel_qmi, "UsbQmi", mock.Mock()),
+                 (quectel_qmi, "open_tunnel", self.open_tunnel),
+                 (quectel_qmi, "connect", connect)]
+        with contextlib.ExitStack() as stack:
+            for owner, name, fake in fakes:
+                stack.enter_context(mock.patch.object(owner, name, fake))
+            stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+            self.assertEqual(quectel_qmi.main(["connect", *options]), 0)
+        return connect.call_args.args[3]
+
+    def test_password_on_the_command_line_still_works(self):
+        # `--pass` is here because argparse takes unambiguous prefixes; a new
+        # option must not make an old spelling ambiguous.
+        for option in ("--password", "--pass"):
+            args = self.run_main("--user", "alice", option, "S3cret")
+            self.assertEqual((args.user, args.password), ("alice", "S3cret"))
+            self.prompt.assert_not_called()
+
+    def test_user_without_password_does_not_prompt(self):
+        args = self.run_main("--user", "alice")
+        self.assertEqual((args.user, args.password), ("alice", None))
+        self.prompt.assert_not_called()
+
+    def test_ask_password_prompts(self):
+        args = self.run_main("--user", "alice", "--ask-password", typed="S3cret")
+        self.assertEqual((args.user, args.password), ("alice", "S3cret"))
+        self.prompt.assert_called_once()
+
+    def test_ask_password_excludes_password(self):
+        with self.assertRaises(SystemExit):
+            self.run_main("--password", "S3cret", "--ask-password", typed="other")
+        self.prompt.assert_not_called()
+
+    def test_cancelled_prompt_exits_before_opening_anything(self):
+        for cancel in (EOFError, KeyboardInterrupt):
+            with self.assertRaises(SystemExit):
+                self.run_main("--ask-password", typed=cancel)
+            self.open_tunnel.assert_not_called()
 
 
 @unittest.skipUnless(sys.platform == "linux" and os.geteuid() == 0
