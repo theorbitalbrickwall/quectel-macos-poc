@@ -83,4 +83,60 @@ public final class Modem {
         // The modem may leave the bus before it answers.
         _ = try? channel.command("AT+CFUN=1,1", timeout: 3)
     }
+
+    // ------------------------------------------------------------------ SMS
+
+    private func require(_ response: ATResponse, _ what: String) throws {
+        guard response.ok else {
+            throw ModemError.rejected("\(what): \(response.lines.joined(separator: " "))")
+        }
+    }
+
+    /// True when the modem announced a new message (`+CMTI`) since the last call.
+    public func takeNewMessageNotice() -> Bool {
+        channel.takeUnsolicited().contains(where: SMSStore.isNewMessageNotice)
+    }
+
+    /// Number of stored messages, nil when the modem cannot tell (no SIM yet).
+    public func storedMessageCount() throws -> Int? {
+        let response = try channel.command("AT+CPMS?")
+        return response.ok ? SMSStore.usedCount(response.body) : nil
+    }
+
+    /// All stored messages, long ones joined. Unread ones become read.
+    public func messages() throws -> [SMSMessage] {
+        try require(channel.command("AT+CMGF=0"), "The modem rejected PDU mode")
+        let response = try channel.command("AT+CMGL=4", timeout: 30)
+        try require(response, "The modem did not list the messages")
+        return SMSStore.messages(SMSStore.parts(response.body))
+    }
+
+    /// Delete a message with all its parts.
+    public func delete(_ message: SMSMessage) throws {
+        for index in message.indices {
+            try require(channel.command("AT+CMGD=\(index)"), "The modem did not delete the message")
+        }
+    }
+
+    /// Send a text message; long ones go out in several parts. `reference`
+    /// ties the parts together and only needs to differ between messages.
+    public func sendMessage(to number: String, text: String,
+                            reference: UInt8 = .random(in: 0...255)) throws {
+        guard let recipient = SMSEncoder.normalizedNumber(number) else {
+            throw ModemError.rejected("This is not a phone number.")
+        }
+        guard !text.isEmpty else {
+            throw ModemError.rejected("The message is empty.")
+        }
+        guard let pdus = SMSEncoder.submitPDUs(to: recipient, text: text, reference: reference) else {
+            throw ModemError.rejected("The message is too long.")
+        }
+        try require(channel.command("AT+CMGF=0"), "The modem rejected PDU mode")
+        for (index, pdu) in pdus.enumerated() {
+            // The network may take a while to accept a message.
+            let response = try channel.command("AT+CMGS=\(SMSEncoder.commandLength(ofPDU: pdu))",
+                                               payload: pdu, timeout: 120)
+            try require(response, "Part \(index + 1) of \(pdus.count) was not sent")
+        }
+    }
 }

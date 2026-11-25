@@ -10,7 +10,7 @@ proofs of concept:
 | Folder | What it is | Needs |
 | --- | --- | --- |
 | [`qmi-userspace/`](qmi-userspace/) | Data connection over QMI from a Python script, through libusb and a `utun` interface | `usbnet` 0, libusb + pyusb, root |
-| [`modem-gui/`](modem-gui/) | Two apps over AT commands: a menu bar app (signal, operator, APN, USB mode) and a debug window (live AT log, command list). They leave the data connection alone | Xcode command line tools |
+| [`modem-gui/`](modem-gui/) | Two apps over AT commands: a menu bar app (signal, operator, APN, USB mode, SMS) and a debug window (live AT log, command list). They leave the data connection alone | Xcode command line tools |
 | [`serial-driver/`](serial-driver/) | DriverKit driver publishing the AT ports as `/dev/cu.quectel*`, plus an AT command script that also works without the driver | Paid Apple Developer team for the driver; nothing for the script |
 
 Suggested order for testing: `serial-driver/tools/quectel_at.py --usb ATI`
@@ -63,9 +63,10 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27.
 | Item | Without hardware | On hardware |
 | --- | --- | --- |
 | `qmi-userspace` | 28 tests against a simulated modem, including pings through a real tunnel on Linux | `info` and `connect` work, with `--ipv6`, `--default-route` and `--set-dns`. Not tested: speed, long sessions |
-| `modem-gui`: `ModemKit` | 24 unit tests | |
+| `modem-gui`: `ModemKit` | 45 unit tests | |
 | `modem-gui`: `QuectelMenu --status` | | Works through the driver's port (with a SIM, on LTE) and over direct USB (without a SIM) |
 | `modem-gui`: menu bar UI and controls | Compiles | The menu shows the status and **Send AT command** works. Setting the APN and the USB mode is not tested |
+| `modem-gui`: SMS | Encoding, decoding, joining of long messages and the AT commands are unit-tested against a fake modem; the window compiles | Not tested |
 | `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | `--run`, the exclusive open, connect, disconnect, changing the port and read-only commands work. Not tested: commands that change the modem, typed commands, Save Log, direct USB |
 | `quectel_at.py`, serial port | 7 tests against a fake modem | Read-only queries and switching the mode work through the driver's ports |
 | `quectel_at.py`, raw USB | | Not tested. Cannot be used while the driver is installed |
