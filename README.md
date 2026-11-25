@@ -66,7 +66,7 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27.
 | `modem-gui`: `ModemKit` | 46 unit tests | |
 | `modem-gui`: `QuectelMenu --status` | | Works through the driver's port (with a SIM, on LTE) and over direct USB (without a SIM) |
 | `modem-gui`: menu bar UI and controls | Compiles | The menu shows the status and **Send AT command** works. Setting the APN and the USB mode is not tested |
-| `modem-gui`: SMS | Encoding, decoding, joining of long messages and the AT commands are unit-tested against a fake modem; the window compiles | `--messages` and `--send-sms` work, with Turkish letters (also from a phone that uses the Turkish shift table), emoji and two-part messages. Not tested: the window, the new-message badge, delete |
+| `modem-gui`: SMS | Encoding, decoding, joining of long messages and the AT commands are unit-tested against a fake modem; the window compiles | `--messages` and `--send-sms` work, with Turkish letters (also from a phone that uses the Turkish shift table), emoji and long messages. The window, the beep and badge for a new message, **Reply…** and **Delete…** work |
 | `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | `--run`, the exclusive open, connect, disconnect, changing the port and read-only commands work. Not tested: commands that change the modem, typed commands, Save Log, direct USB |
 | `quectel_at.py`, serial port | 7 tests against a fake modem | Read-only queries and switching the mode work through the driver's ports |
 | `quectel_at.py`, raw USB | | Not tested. Cannot be used while the driver is installed |
