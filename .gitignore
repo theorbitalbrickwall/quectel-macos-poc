@@ -5,3 +5,6 @@ __pycache__/
 .build/
 *.swp
 .TemporaryItems/
+
+# Claude Code worktrees
+.claude/worktrees/
