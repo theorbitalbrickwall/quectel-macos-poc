@@ -16,10 +16,12 @@ the menu.
 Controls: set the APN, switch the USB network mode (with a reboot), send a raw
 AT command, read, delete and send SMS.
 
-On a real modem, `--status` works, the menu shows the status and **Send AT
-command** works. SMS works: the window, the beep and badge for a new
+On a real modem, `--status` works, the menu shows the status, and **Send AT
+command** and switching the USB mode work. SMS works: the window, the beep and badge for a new
 message, sending, replying, deleting and `--messages`, with Turkish letters,
-emoji and long messages. Setting the APN and the USB mode has not been tried.
+emoji and long messages. Over direct USB, without the driver, the status,
+**Send AT command**, the USB mode switch and listing, sending and deleting
+messages work. Setting the APN has not been tried.
 
 ### SMS
 
@@ -102,8 +104,8 @@ Not included (QNavigator has them): SMS and call screens, TCP/IP tests,
 firmware download.
 
 Not tested on hardware: the triangle and pencil commands, typed commands and
-history, Save Log, and the window over direct USB without the driver
-(`--run` works there).
+history, and Save Log. The window also works over direct USB without the
+driver.
 
 ## How the apps reach the modem
 
