@@ -102,7 +102,8 @@ Not included (QNavigator has them): SMS and call screens, TCP/IP tests,
 firmware download.
 
 Not tested on hardware: the triangle and pencil commands, typed commands and
-history, Save Log, and direct USB without the driver.
+history, Save Log, and the window over direct USB without the driver
+(`--run` works there).
 
 ## How the apps reach the modem
 
