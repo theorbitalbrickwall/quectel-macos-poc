@@ -65,11 +65,11 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27.
 | `qmi-userspace` | 28 tests against a simulated modem, including pings through a real tunnel on Linux | `info` and `connect` work, with `--ipv6`, `--default-route` and `--set-dns`. Not tested: speed, long sessions |
 | `modem-gui`: `ModemKit` | 46 unit tests | |
 | `modem-gui`: `QuectelMenu --status` | | Works through the driver's port and over direct USB (with a SIM, on LTE) |
-| `modem-gui`: menu bar UI and controls | Compiles | The menu shows the status and **Send AT command** works. Setting the APN and the USB mode is not tested |
-| `modem-gui`: SMS | Encoding, decoding, joining of long messages and the AT commands are unit-tested against a fake modem; the window compiles | `--messages` and `--send-sms` work, with Turkish letters (also from a phone that uses the Turkish shift table), emoji and long messages. The window, the beep and badge for a new message, **Reply…** and **Delete…** work. Sending and listing also work over direct USB |
-| `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | `--run`, the exclusive open, connect, disconnect, changing the port and read-only commands work; `--run` also works over direct USB. Not tested: commands that change the modem, typed commands, Save Log, the window over direct USB |
+| `modem-gui`: menu bar UI and controls | Compiles | The menu shows the status, and **Send AT command** and switching the USB mode work, also over direct USB. Setting the APN is not tested |
+| `modem-gui`: SMS | Encoding, decoding, joining of long messages and the AT commands are unit-tested against a fake modem; the window compiles | `--messages` and `--send-sms` work, with Turkish letters (also from a phone that uses the Turkish shift table), emoji and long messages. The window, the beep and badge for a new message, **Reply…** and **Delete…** work. Listing, sending and deleting also work over direct USB, in the window too |
+| `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | `--run`, the exclusive open, connect, disconnect, changing the port and read-only commands work, through the driver's ports and over direct USB (interfaces 2 and 3); so does `--run`. Not tested: commands that change the modem, typed commands, Save Log |
 | `quectel_at.py`, serial port | 7 tests against a fake modem | Read-only queries and switching the mode work through the driver's ports |
-| `quectel_at.py`, raw USB | | Read-only queries work on interfaces 2 and 3, without root. Not tested: switching the mode. Cannot be used while the driver is installed |
+| `quectel_at.py`, raw USB | | Read-only queries work on interfaces 2 and 3 and switching the mode works, without root. Cannot be used while the driver is installed |
 | `serial-driver`: driver and installer | Compiles unsigned and development-signed; logic fuzzed against a fake DriverKit | Loads; `/dev/cu.quectel1`, `2` and `3` appear; AT commands work on 2 and 3, also thousands in a row; NMEA data arrives on 1. Not tested: PPP, unplugging while open |
 
 The protocol details (QMI message layouts, the USB interface layout, raw IP
