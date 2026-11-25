@@ -73,7 +73,9 @@ enum GSMAlphabet {
             } else if index < septets.count {
                 let next = septets[index] & 0x7F
                 index += 1
-                scalars.append(shift[next] ?? table[Int(next)])
+                // Escape twice is reserved and shown as a space. A code the
+                // shift table does not define means the main table's character.
+                scalars.append(next == escape ? " " : shift[next] ?? table[Int(next)])
             } else {
                 scalars.append(" ")
             }
@@ -263,6 +265,11 @@ public struct SMSPDU: Equatable {
             }
         }
 
+        if coding & 0x80 == 0, coding & 0x20 != 0 {
+            // Compressed text (TS 23.042), which hardly any network uses.
+            units = Array("(Compressed message, it cannot be shown.)".utf16)
+            return
+        }
         switch SMSPDU.alphabet(coding: coding) {
         case .gsm7:
             // The header is padded to a septet boundary.

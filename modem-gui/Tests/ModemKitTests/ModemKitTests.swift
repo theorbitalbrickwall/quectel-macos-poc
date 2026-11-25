@@ -424,6 +424,19 @@ final class SMSTests: XCTestCase {
         let pdu = SMSPDU(hex: "0791947101670000440C910955153254760000621152220351400A0600032A020124C834")
         XCTAssertNil(pdu?.part)
         XCTAssertEqual(pdu?.text, "Hi")
+        // Escape twice is a space; an undefined escape code is the main table's character.
+        XCTAssertEqual(GSMAlphabet.decode([0x1B, 0x1B, 0x41]), " A")
+        XCTAssertEqual(GSMAlphabet.decode([0x1B, 0x41, 0x1B]), "A ")
+        XCTAssertEqual(GSMAlphabet.decode([0x1B, 0x40, 0x1B, 0x60], locking: 1), "|ç")
+        // Compressed text is not decoded as if it were plain.
+        let compressed = String(PDU.gsm.prefix(36)) + "20" + String(PDU.gsm.dropFirst(38))
+        XCTAssertEqual(SMSPDU(hex: compressed)?.text, "(Compressed message, it cannot be shown.)")
+        XCTAssertEqual(SMSPDU.alphabet(coding: 0x0C), .gsm7)  // reserved character set
+        XCTAssertEqual(SMSPDU.alphabet(coding: 0x48), .ucs2)  // marked for automatic deletion
+        XCTAssertEqual(SMSPDU.alphabet(coding: 0x90), .gsm7)  // reserved group
+        XCTAssertEqual(SMSPDU.alphabet(coding: 0xD8), .gsm7)  // message waiting, 7-bit
+        XCTAssertEqual(SMSPDU.alphabet(coding: 0xE8), .ucs2)  // message waiting, UCS-2
+        XCTAssertEqual(SMSPDU.alphabet(coding: 0xF4), .data)
         // A time stamp digit that is not a digit counts as 0.
         XCTAssertEqual(SMSPDU.timestamp([0x62, 0x11, 0x52, 0x22, 0x03, 0xF1, 0x40]),
                        SMSPDU.timestamp([0x62, 0x11, 0x52, 0x22, 0x03, 0x01, 0x40]))
