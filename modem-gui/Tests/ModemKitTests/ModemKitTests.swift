@@ -370,11 +370,11 @@ enum PDU {
     static let submitGSM = "0001000C91095515325476000013C8329BFD066D50F7B79C4DDEA4409B720D"
     static let submitUCS2 = "0001000B815055214365F700083E004D0065007200680061006200610020006400FC006E00790061002C0020006E006100730131006C00730131006E003F0020011F00FC015F006900F600E7"
     static let submitUCS2Text = "Merhaba dünya, nasılsın? ğüşiöç"
-    /// "x" 152 times, then "[yz": the escape pair of "[" must not be split.
+    /// "x" 152 times, then "[yyyyyyyy": the escape pair of "[" must not be split.
     static let submitLongGSM = [
         "0041000D91947110325476F800009F050003070201F0"
             + String(repeating: "783C1E8FC7E3F1", count: 18) + "783C1E8FC7E301",
-        "0041000D91947110325476F800000B05000307020236BCBC1E",
+        "0041000D91947110325476F800001105000307020236BC7C3E9FCFE7F379",
     ]
     static let submitLongUCS2 = [
         "0041000D91947110325476F800088A050003070201" + String(repeating: "015F", count: 66),
@@ -477,7 +477,7 @@ final class SMSTests: XCTestCase {
     }
 
     func testSplitsLongMessages() {
-        let gsm = String(repeating: "x", count: 152) + "[yz"
+        let gsm = String(repeating: "x", count: 152) + "[yyyyyyyy"
         XCTAssertEqual(SMSEncoder.submitPDUs(to: "+4917012345678", text: gsm, reference: 7), PDU.submitLongGSM)
         XCTAssertEqual(SMSEncoder.submitPDUs(to: "+4917012345678", text: PDU.longUCS2Text, reference: 7),
                        PDU.submitLongUCS2)
