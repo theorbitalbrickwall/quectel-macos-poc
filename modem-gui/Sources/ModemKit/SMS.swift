@@ -200,11 +200,11 @@ public struct SMSPDU: Equatable {
         guard let serviceCentreLength = byte(), take(serviceCentreLength) != nil,
               let first = byte() else { return nil }
         switch first & 0x03 {
-        case 0: kind = .deliver
         case 1: kind = .submit
-        default:
-            kind = .other
+        case 2:
+            kind = .other  // status report
             return
+        default: kind = .deliver  // 3 is reserved and to be read as SMS-DELIVER
         }
         if kind == .submit {
             guard byte() != nil else { return nil }  // message reference
@@ -233,11 +233,15 @@ public struct SMSPDU: Equatable {
             guard let headerSize = data.first, data.count >= 1 + Int(headerSize) else { return nil }
             headerLength = 1 + Int(headerSize)
             var index = 1
-            while index + 2 <= headerLength {
+            var wellFormed = true
+            while index < headerLength {
+                guard index + 2 <= headerLength, index + 2 + Int(data[index + 1]) <= headerLength else {
+                    wellFormed = false
+                    break
+                }
                 let identifier = data[index]
                 let size = Int(data[index + 1])
                 let start = index + 2
-                guard start + size <= headerLength else { break }
                 let value = data[start..<(start + size)].map { Int($0) }
                 switch (identifier, size) {
                 case (0x00, 3): part = Part(reference: value[0], total: value[1], sequence: value[2])
@@ -247,6 +251,12 @@ public struct SMSPDU: Equatable {
                 default: break
                 }
                 index = start + size
+            }
+            if !wellFormed {
+                // An element that does not fit: the whole header is ignored.
+                part = nil
+                single = 0
+                locking = 0
             }
             if let found = part, found.total < 1 || found.sequence < 1 || found.sequence > found.total {
                 part = nil
@@ -307,8 +317,10 @@ public struct SMSPDU: Equatable {
     /// quarter hours.
     static func timestamp(_ bytes: [UInt8]) -> Date? {
         guard bytes.count == 7 else { return nil }
-        func decimal(_ byte: UInt8) -> Int { Int(byte & 0x0F) * 10 + Int(byte >> 4) }
-        let quarters = Int(bytes[6] & 0x07) * 10 + Int(bytes[6] >> 4)
+        // A semi-octet that is not a digit counts as 0.
+        func digit(_ nibble: UInt8) -> Int { nibble <= 9 ? Int(nibble) : 0 }
+        func decimal(_ byte: UInt8) -> Int { digit(byte & 0x0F) * 10 + digit(byte >> 4) }
+        let quarters = Int(bytes[6] & 0x07) * 10 + digit(bytes[6] >> 4)
         let offset = quarters * 900 * (bytes[6] & 0x08 != 0 ? -1 : 1)
         var calendar = Calendar(identifier: .gregorian)
         guard let zone = TimeZone(secondsFromGMT: offset) else { return nil }

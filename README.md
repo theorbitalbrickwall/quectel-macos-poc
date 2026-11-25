@@ -63,7 +63,7 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27.
 | Item | Without hardware | On hardware |
 | --- | --- | --- |
 | `qmi-userspace` | 28 tests against a simulated modem, including pings through a real tunnel on Linux | `info` and `connect` work, with `--ipv6`, `--default-route` and `--set-dns`. Not tested: speed, long sessions |
-| `modem-gui`: `ModemKit` | 45 unit tests | |
+| `modem-gui`: `ModemKit` | 46 unit tests | |
 | `modem-gui`: `QuectelMenu --status` | | Works through the driver's port (with a SIM, on LTE) and over direct USB (without a SIM) |
 | `modem-gui`: menu bar UI and controls | Compiles | The menu shows the status and **Send AT command** works. Setting the APN and the USB mode is not tested |
 | `modem-gui`: SMS | Encoding, decoding, joining of long messages and the AT commands are unit-tested against a fake modem; the window compiles | Not tested |

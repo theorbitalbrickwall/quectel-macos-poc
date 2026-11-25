@@ -415,6 +415,20 @@ final class SMSTests: XCTestCase {
         XCTAssertEqual(SMSPDU(hex: PDU.longGSM[1])?.text, "tail [ok]")
     }
 
+    func testFollowsTheRulesForOddPDUs() {
+        // Reserved message type 3 is read as a received message.
+        let reserved = String(PDU.gsm.prefix(16)) + "07" + String(PDU.gsm.dropFirst(18))
+        XCTAssertEqual(SMSPDU(hex: reserved)?.kind, .deliver)
+        XCTAssertEqual(SMSPDU(hex: reserved)?.text, PDU.gsmText)
+        // A header whose last element is cut short is ignored as a whole.
+        let pdu = SMSPDU(hex: "0791947101670000440C910955153254760000621152220351400A0600032A020124C834")
+        XCTAssertNil(pdu?.part)
+        XCTAssertEqual(pdu?.text, "Hi")
+        // A time stamp digit that is not a digit counts as 0.
+        XCTAssertEqual(SMSPDU.timestamp([0x62, 0x11, 0x52, 0x22, 0x03, 0xF1, 0x40]),
+                       SMSPDU.timestamp([0x62, 0x11, 0x52, 0x22, 0x03, 0x01, 0x40]))
+    }
+
     func testRejectsBrokenPDUs() {
         XCTAssertNil(SMSPDU(hex: ""))
         XCTAssertNil(SMSPDU(hex: "zz"))
