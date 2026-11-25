@@ -111,6 +111,13 @@ Projects the code follows:
   only; no code was taken.
 - Quectel's AT command manuals for the EC2x series: every AT command used
   here. The debug window is modelled on Quectel's QNavigator tool for Windows.
+- The 3GPP specifications
+  [TS 23.040](https://www.3gpp.org/dynareport/23040.htm) and
+  [TS 23.038](https://www.3gpp.org/dynareport/23038.htm) (as ETSI TS 123 040
+  and TS 123 038, V19.0.0): the SMS message layout, long messages, the GSM
+  7-bit alphabet and the Turkish character tables used by `modem-gui`. The SMS
+  AT commands are those of
+  [TS 27.005](https://www.3gpp.org/dynareport/27005.htm).
 
 Projects that answered the feasibility questions:
 
