@@ -11,8 +11,7 @@ Lightly tested on one EC25-EUX; see
 
 `tools/quectel_at.py` can talk to the AT interface directly through libusb.
 macOS attaches no driver to these interfaces, so nothing has to be installed
-or signed. Read-only queries work this way; switching the mode has not been
-tried. It cannot be used while the driver below is installed.
+or signed. It cannot be used while the driver below is installed.
 
 It needs [libusb](https://libusb.info) and
 [pyusb](https://github.com/pyusb/pyusb). Install them with your package

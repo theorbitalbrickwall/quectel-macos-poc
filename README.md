@@ -62,15 +62,14 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27.
 
 | Item | Without hardware | On hardware |
 | --- | --- | --- |
-| `qmi-userspace` | 28 tests against a simulated modem, including pings through a real tunnel on Linux | `info` and `connect` work, with `--ipv6`, `--default-route` and `--set-dns`. Not tested: speed, long sessions |
+| `qmi-userspace` | 28 tests against a simulated modem | `info` and `connect` work. Not tested: speed, long sessions |
 | `modem-gui`: `ModemKit` | 46 unit tests | |
-| `modem-gui`: `QuectelMenu --status` | | Works through the driver's port and over direct USB (with a SIM, on LTE) |
-| `modem-gui`: menu bar UI and controls | Compiles | The menu shows the status, and **Send AT command** and switching the USB mode work, also over direct USB. Setting the APN is not tested |
-| `modem-gui`: SMS | Encoding, decoding, joining of long messages and the AT commands are unit-tested against a fake modem; the window compiles | `--messages` and `--send-sms` work, with Turkish letters (also from a phone that uses the Turkish shift table), emoji and long messages. The window, the beep and badge for a new message, **Reply…** and **Delete…** work. Listing, sending and deleting also work over direct USB, in the window too |
-| `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | `--run`, the exclusive open, connect, disconnect, changing the port and read-only commands work, through the driver's ports and over direct USB (interfaces 2 and 3); so does `--run`. Not tested: commands that change the modem, typed commands, Save Log |
-| `quectel_at.py`, serial port | 7 tests against a fake modem | Read-only queries and switching the mode work through the driver's ports |
-| `quectel_at.py`, raw USB | | Read-only queries work on interfaces 2 and 3 and switching the mode works, without root. Cannot be used while the driver is installed |
-| `serial-driver`: driver and installer | Compiles unsigned and development-signed; logic fuzzed against a fake DriverKit | Loads; `/dev/cu.quectel1`, `2` and `3` appear; AT commands work on 2 and 3, also thousands in a row; NMEA data arrives on 1. Not tested: PPP, unplugging while open |
+| `modem-gui`: menu bar app | Compiles | Works through the driver and over direct USB. Not tested: setting the APN |
+| `modem-gui`: SMS | Unit-tested against a fake modem | Works |
+| `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | Read-only commands work through the driver and over direct USB. Not tested: commands that change the modem, typed commands, Save Log |
+| `quectel_at.py`, serial port | 7 tests against a fake modem | Works through the driver's ports |
+| `quectel_at.py`, raw USB | | Works without root. Cannot be used while the driver is installed |
+| `serial-driver`: driver and installer | Compiles; logic fuzzed against a fake DriverKit | Ports 1 to 3 appear; AT commands work on 2 and 3, NMEA data arrives on 1. Not tested: PPP, unplugging while open |
 
 The protocol details (QMI message layouts, the USB interface layout, raw IP
 in QMI mode) come from the Linux drivers and libqmi. The AT commands were
