@@ -68,8 +68,9 @@ xattr -dr com.apple.quarantine /Applications/QuectelMenu.app /Applications/Quect
 - The terminal options below also work on an installed app, for example
   `/Applications/QuectelMenu.app/Contents/MacOS/QuectelMenu --status`.
 
-Apps signed with a Developer ID certificate start and reach the modem. Not
-tested: notarising and **Open at login**.
+Apps signed with a Developer ID certificate start and reach the modem, and
+macOS accepts the notarised disk image. Not tested: **Open at login** and a
+download on another Mac.
 
 ## Menu bar app
 
