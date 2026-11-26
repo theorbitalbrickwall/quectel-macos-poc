@@ -25,6 +25,28 @@ jobs:
         run: python3 qmi-userspace/test_qmi.py
       - name: Build and test the menu bar app
         run: swift test --package-path modem-gui && swift build --package-path modem-gui -c release
+      - name: Bundle the apps
+        run: modem-gui/scripts/bundle.sh --dmg
+      - name: Check the app bundles
+        run: |
+          cd modem-gui/build
+          for app in QuectelMenu QuectelDebug; do
+            codesign --verify --strict --verbose=2 "$app.app"
+            plutil -p "$app.app/Contents/Info.plist"
+            test -s "$app.app/Contents/Resources/AppIcon.icns"
+            # Without this key System Information lists the app as iOS.
+            test "$(plutil -extract CFBundleSupportedPlatforms.0 raw "$app.app/Contents/Info.plist")" = MacOSX
+          done
+          hdiutil attach -nobrowse -readonly -mountpoint mnt QuectelApps.dmg
+          ls -l mnt
+          codesign --verify --strict mnt/QuectelMenu.app mnt/QuectelDebug.app
+          test "$(readlink mnt/Applications)" = /Applications
+          hdiutil detach mnt
+      - name: Upload the apps
+        uses: actions/upload-artifact@v4
+        with:
+          name: quectel-apps
+          path: modem-gui/build/QuectelApps.dmg
       - name: Compile driver and installer (unsigned)
         run: serial-driver/scripts/build.sh --unsigned
 

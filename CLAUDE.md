@@ -35,6 +35,8 @@ table of what is and is not verified.
   model, SMS in PDU mode, port monitor, command list), `QuectelMenu` (AppKit menu bar app) and
   `QuectelDebug` (AppKit debug window). AT commands only. Serial ports are
   opened exclusively; the menu bar app uses port 2, the debug window port 3.
+  `scripts/bundle.sh` builds the two `.app` bundles and a DMG (ad hoc signed, or
+  with `DEVELOPMENT_TEAM`; also in CI), `scripts/install.sh` copies them into `/Applications`.
 - `serial-driver/`: DriverKit serial driver (`Driver/`), installer app
   (`Installer/`), XcodeGen project (`project.yml`), and
   `tools/quectel_at.py` (AT commands over a serial port or raw USB).

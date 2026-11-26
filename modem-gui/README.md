@@ -7,6 +7,39 @@ touch the data connection, so they work next to ECM (or the QMI tool).
 - `QuectelDebug`: a window for debugging, in the spirit of Quectel's QNavigator
   for Windows. See [Debug window](#debug-window).
 
+## Install
+
+Needs the Xcode command line tools. Build both apps and copy them into
+`/Applications`:
+
+```bash
+scripts/install.sh
+```
+
+Remove them:
+
+```bash
+scripts/install.sh --uninstall
+```
+
+Build `build/QuectelApps.dmg`, a disk image with the apps and a link to
+Applications to drag them onto:
+
+```bash
+scripts/bundle.sh --dmg
+```
+
+- The apps are signed ad hoc and built for the processor type of this Mac.
+- Set `DEVELOPMENT_TEAM` to an Apple developer team ID to sign with that
+  team's certificate, and `NOTARY_PROFILE` to a `notarytool` profile to
+  notarise the disk image. Other Macs warn about apps without both.
+- **Open at login** in the menu bar app's menu starts it when you log in.
+- GitHub Actions builds the disk image on every push (artifact
+  `quectel-apps`, ad hoc, Apple silicon).
+
+Works on a Mac, signed and notarised. Not tested: the start at the next
+login, and a download on another Mac.
+
 ## Menu bar app
 
 Shows: technology and signal bars in the menu bar; operator, band, RSRP / RSRQ
@@ -42,7 +75,7 @@ until the window is opened.
 
 ### Run
 
-Needs the Xcode command line tools, nothing else:
+Without installing:
 
 ```bash
 swift run -c release QuectelMenu
@@ -139,3 +172,5 @@ swift test
 - `Sources/QuectelMenu`: the menu bar app; `Messages.swift` is the SMS window.
 - `Sources/QuectelDebug/main.swift`: the debug window.
 - `Tests/ModemKitTests`: tests with a fake modem.
+- `scripts`: `bundle.sh` builds the app bundles and the disk image, `make-icon.swift` draws
+  their icon, `install.sh` copies them into the Applications folder.
