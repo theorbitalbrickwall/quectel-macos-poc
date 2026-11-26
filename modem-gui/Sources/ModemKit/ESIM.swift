@@ -71,6 +71,9 @@ public struct ESIMFailure: Error, Equatable {
 }
 
 public enum ESIMParser {
+    /// Longest profile name kept, in Unicode scalars.
+    public static let maxNameLength = 64
+
     /// The values after `+QESIM: "<what>",` when the first of them, `<result>`,
     /// is 0; the failure otherwise. Nil without such a line. The modem writes
     /// the prefix without a space, the note with one.
@@ -102,8 +105,12 @@ public enum ESIMParser {
             }
             func text(_ index: Int) -> String {
                 guard index < values.count else { return "" }
-                // The names come from the profile's operator.
-                return SMSText.clean(values[index], singleLine: true)
+                // The names come from the profile's operator, so they get the
+                // treatment of SMS text and a length limit. The note allows a
+                // nickname 32 characters.
+                let clean = SMSText.clean(values[index], singleLine: true)
+                    .trimmingCharacters(in: .whitespaces)
+                return String(String.UnicodeScalarView(clean.unicodeScalars.prefix(ESIMParser.maxNameLength)))
                     .trimmingCharacters(in: .whitespaces)
             }
             return ESIMProfile(iccid: values[0], enabled: status == 1, nickname: text(2),

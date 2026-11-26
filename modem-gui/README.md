@@ -75,13 +75,19 @@ until the window is opened.
 
 ### eSIM
 
-With an eSIM in the modem, the **eSIM** submenu shows its EID (click to copy
+Needs an eUICC as the modem's SIM: a removable eSIM card in the SIM slot, or
+one soldered next to the modem. A normal SIM has no profiles to switch
+between.
+
+With an eUICC, the **eSIM** submenu shows its EID (click to copy
 it) and the installed profiles with their ICCID. The profile in use has a
 check mark. Choosing another one switches to it, after a confirmation; the
 data connection drops until the modem has registered with the new profile.
 
-- This uses the modem's own `AT+QESIM` commands. Without an eSIM, or with a
+- This uses the modem's own `AT+QESIM` commands. Without an eUICC, or with a
   firmware that lacks the command, the submenu is not shown.
+- Profile names come from the operator and are not trusted: they are cleaned
+  like SMS text and cut to 64 characters.
 - The eSIM is read when the app finds the modem, when the SIM state changes
   and on **Refresh now**, not at every poll.
 - Profiles cannot be downloaded, renamed or deleted here.

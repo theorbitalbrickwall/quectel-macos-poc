@@ -100,21 +100,26 @@ public enum ATParser {
     }
 
     /// Split a comma-separated parameter list, honouring double quotes.
+    /// Works on Unicode scalars: a quote or comma followed by a combining
+    /// mark is one `Character` to Swift, but still a quote or comma here.
     public static func fields(_ text: String) -> [String] {
         var fields: [String] = []
-        var current = ""
+        var current = String.UnicodeScalarView()
         var quoted = false
-        for character in text {
-            if character == "\"" {
+        func finish() {
+            fields.append(String(current).trimmingCharacters(in: .whitespaces))
+            current = String.UnicodeScalarView()
+        }
+        for scalar in text.unicodeScalars {
+            if scalar == "\"" {
                 quoted.toggle()
-            } else if character == "," && !quoted {
-                fields.append(current.trimmingCharacters(in: .whitespaces))
-                current = ""
+            } else if scalar == "," && !quoted {
+                finish()
             } else {
-                current.append(character)
+                current.append(scalar)
             }
         }
-        fields.append(current.trimmingCharacters(in: .whitespaces))
+        finish()
         return fields
     }
 

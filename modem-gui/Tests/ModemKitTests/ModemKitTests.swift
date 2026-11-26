@@ -141,6 +141,11 @@ let lteReplies = [
 ]
 
 final class ParserTests: XCTestCase {
+    func testFieldsSeeQuotesAndCommasUnderCombiningMarks() {
+        XCTAssertEqual(ATParser.fields("\"\u{301}a,b\",\"c\"\u{301},d,\u{301}e"),
+                       ["\u{301}a,b", "c\u{301}", "d", "\u{301}e"])
+    }
+
     func testFieldsHonourQuotes() {
         XCTAssertEqual(ATParser.fields(" \"FDD LTE\",\"a,b\",,7"), ["FDD LTE", "a,b", "", "7"])
     }
@@ -862,6 +867,93 @@ final class ESIMTests: XCTestCase {
                                             "\"8932042000000199885F\",0,\"a\u{202E}b\",\" x\u{07}y \""])
         XCTAssertEqual(profiles?.first?.nickname, "a\u{FFFD}b")
         XCTAssertEqual(profiles?.first?.provider, "x\u{FFFD}y")
+    }
+
+    func testSurvivesMalformedProfileNames() {
+        var state: UInt64 = 0x9E37_79B9_7F4A_7C15
+        func next() -> Int {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Int(state >> 40) & 0xFF
+        }
+        let nasty: [Unicode.Scalar] = ["\u{0}", "\u{7}", "\u{9}", "\u{A}", "\u{D}", "\u{1B}", "\u{7F}", "\u{85}", "\u{9B}",
+                                       "\u{202E}", "\u{2066}", "\u{2028}", "\u{301}", ",", " ",
+                                       "+", "ş", "\u{1F600}"]
+        /// Any bytes read as UTF-8, mixed with characters that are known trouble.
+        func text(quotes: Bool) -> String {
+            var scalars = String.UnicodeScalarView()
+            for _ in 0..<(next() % 3 == 0 ? next() : next() % 24) {
+                if next() % 3 == 0 {
+                    scalars.append(nasty[next() % nasty.count])
+                } else {
+                    scalars.append(contentsOf: String(decoding: [UInt8(next()), UInt8(next())],
+                                                      as: UTF8.self).unicodeScalars)
+                }
+            }
+            var kept = String.UnicodeScalarView()
+            kept.append(contentsOf: scalars.filter { quotes || $0 != "\"" })
+            return String(kept)
+        }
+        func check(_ profile: ESIMProfile, _ line: String) {
+            XCTAssertTrue(ESIMParser.isValidICCID(profile.iccid), line.debugDescription)
+            for name in [profile.nickname, profile.provider, profile.name] {
+                XCTAssertLessThanOrEqual(name.unicodeScalars.count, ESIMParser.maxNameLength)
+                XCTAssertEqual(name, name.trimmingCharacters(in: .whitespaces), line.debugDescription)
+                XCTAssertFalse(name.unicodeScalars.contains {
+                    switch $0.value {
+                    case 0x00...0x1F, 0x7F...0x9F, 0x202A...0x202E, 0x2066...0x2069, 0x2028, 0x2029: return true
+                    default: return false
+                    }
+                }, line.debugDescription)
+            }
+            XCTAssertFalse(profile.name.isEmpty)
+        }
+        let iccids = ["8900000000000000011F", "89320420000002068839", "8900000000000000037F"]
+        let blank: [Unicode.Scalar] = [" ", "\u{9}", "\u{A}", "\u{D}", "\u{85}", "\u{2028}", "\u{2029}", "\u{A0}"]
+        var named = 0
+        for round in 0..<20000 {
+            let iccid = iccids[round % iccids.count]
+            let enabled = next() % 2 == 1
+            let status = round % 2 == 0 ? "\"\(enabled ? 1 : 0)\"" : "\(enabled ? 1 : 0)"
+            // Names without a quote cannot touch the ICCID or the status,
+            // whatever else is in them, and come out as what was put in.
+            let names = [text(quotes: false), text(quotes: false)]
+            // Only blanks, including line ends, make an empty name.
+            let expectEmpty = names.map { $0.unicodeScalars.allSatisfy { blank.contains($0) } }
+            let line = "\"\(iccid)\",\(status),\"\(names[0])\",\"\(names[1])\""
+            let profiles = ESIMParser.profiles(["+QESIM:\"list\",0", line])
+            XCTAssertEqual(profiles?.count, 1, line.debugDescription)
+            XCTAssertEqual(profiles?.first?.iccid, iccid, line.debugDescription)
+            XCTAssertEqual(profiles?.first?.enabled, enabled, line.debugDescription)
+            if let profile = profiles?.first {
+                check(profile, line)
+                XCTAssertEqual(profile.nickname.isEmpty, expectEmpty[0], line.debugDescription)
+                XCTAssertEqual(profile.provider.isEmpty, expectEmpty[1], line.debugDescription)
+                if profile.name != iccid { named += 1 }
+            }
+            // With quotes in the names, and with damaged lines, the fields may
+            // shift, but what comes out must still be safe to show and to send.
+            var broken = "\"\(iccid)\",\(status),\"\(text(quotes: true))\",\"\(text(quotes: true))\""
+            if round % 3 == 0 {
+                var bytes = Array(broken.utf8)
+                for _ in 0...(next() % 4) { bytes[next() % bytes.count] = UInt8(next()) }
+                if next() % 4 == 0 { bytes.removeLast(next() % bytes.count) }
+                broken = String(decoding: bytes, as: UTF8.self)
+            }
+            let lines = ["+QESIM: \"list\",0"] + broken.split(whereSeparator: { $0.isNewline }).map(String.init)
+            for profile in ESIMParser.profiles(lines) ?? [] { check(profile, broken) }
+            _ = ESIMParser.eid([broken])
+            _ = ESIMParser.eid(["+QESIM: \"eid\",0," + broken])
+        }
+        XCTAssertGreaterThan(named, 15000)
+    }
+
+    func testLongProfileNamesAreCut() {
+        let long = String(repeating: "x", count: 500)
+        let marks = "e" + String(repeating: "\u{301}", count: 500)
+        let profiles = ESIMParser.profiles(["+QESIM: \"list\",0",
+                                            "\"8932042000000199885F\",0,\"\(long)\",\"\(marks)\""])
+        XCTAssertEqual(profiles?.first?.nickname, String(repeating: "x", count: 64))
+        XCTAssertEqual(profiles?.first?.provider.unicodeScalars.count, 64)
     }
 
     func testICCIDValidation() {
