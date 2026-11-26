@@ -63,7 +63,7 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27.
 | Item | Without hardware | On hardware |
 | --- | --- | --- |
 | `qmi-userspace` | 28 tests against a simulated modem | `info` and `connect` work. Not tested: speed, long sessions |
-| `modem-gui`: `ModemKit` | 46 unit tests | |
+| `modem-gui`: `ModemKit` | 65 unit tests | |
 | `modem-gui`: menu bar app | Compiles | Works through the driver and over direct USB. Not tested: setting the APN |
 | `modem-gui`: SMS | Unit-tested against a fake modem | Works |
 | `modem-gui`: eSIM profiles | Unit-tested against a fake modem | Not tested |
