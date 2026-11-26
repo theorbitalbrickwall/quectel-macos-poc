@@ -9,68 +9,36 @@ touch the data connection, so they work next to ECM (or the QMI tool).
 
 ## Install
 
-Needs the Xcode command line tools. This builds `QuectelMenu.app` and
-`QuectelDebug.app` and copies them into `/Applications`:
+Needs the Xcode command line tools. Build both apps and copy them into
+`/Applications`:
 
 ```bash
 scripts/install.sh
 ```
 
-Into another folder:
-
-```bash
-DESTINATION=~/Applications scripts/install.sh
-```
-
-Remove them again:
+Remove them:
 
 ```bash
 scripts/install.sh --uninstall
 ```
 
-Only build the apps, into `build/`:
-
-```bash
-scripts/bundle.sh
-```
-
-Also make `build/QuectelApps.dmg`, a disk image where the apps are dragged
-onto an Applications link:
+Build `build/QuectelApps.dmg`, a disk image with the apps and a link to
+Applications to drag them onto:
 
 ```bash
 scripts/bundle.sh --dmg
 ```
 
-Sign the apps and the disk image with a certificate of your Apple developer
-team (a Developer ID certificate if the keychain has one, otherwise an Apple
-Development one):
+- The apps are signed ad hoc and built for the processor type of this Mac.
+- Set `DEVELOPMENT_TEAM` to an Apple developer team ID to sign with that
+  team's certificate, and `NOTARY_PROFILE` to a `notarytool` profile to
+  notarise the disk image. Other Macs warn about apps without both.
+- **Open at login** in the menu bar app's menu starts it when you log in.
+- GitHub Actions builds the disk image on every push (artifact
+  `quectel-apps`, ad hoc, Apple silicon).
 
-```bash
-DEVELOPMENT_TEAM=XXXXXXXXXX scripts/bundle.sh --dmg
-```
-
-- Without `DEVELOPMENT_TEAM` the apps are signed ad hoc, which needs no
-  Apple developer account. `install.sh` passes the variable on.
-- Other Macs open the apps without a warning only when they are signed with
-  a Developer ID certificate and notarised. For that, set `NOTARY_PROFILE`
-  to a profile saved with `xcrun notarytool store-credentials`.
-- The apps are built for the processor type of the Mac that builds them.
-- **Open at login** in the menu of the menu bar app starts it when you log
-  in. macOS lists it under System Settings, General, Login Items.
-- Every push also builds the disk image on GitHub Actions, signed ad hoc;
-  it is the `quectel-apps` artifact of a run (Apple silicon). macOS blocks
-  apps downloaded this way until the download mark is removed:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/QuectelMenu.app /Applications/QuectelDebug.app
-```
-
-- The terminal options below also work on an installed app, for example
-  `/Applications/QuectelMenu.app/Contents/MacOS/QuectelMenu --status`.
-
-Apps signed with a Developer ID certificate start and reach the modem, and
-macOS accepts the notarised disk image. **Open at login** adds the login
-item. Not tested: the start at the next login and a download on another Mac.
+Works on a Mac, signed and notarised. Not tested: the start at the next
+login, and a download on another Mac.
 
 ## Menu bar app
 
