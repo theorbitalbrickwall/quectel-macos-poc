@@ -34,23 +34,42 @@ Only build the apps, into `build/`:
 scripts/bundle.sh
 ```
 
-- The apps are signed ad hoc, without an Apple developer account, and are
-  built for the processor type of the Mac that builds them.
-- **Open at login** in the menu of the menu bar app starts it when you log
-  in. macOS lists it under System Settings, General, Login Items.
-- Every push also builds the apps on GitHub Actions; the `quectel-apps`
-  artifact of a run holds them as a zip (Apple silicon). macOS blocks apps
-  downloaded this way until the download mark is removed:
+Also make `build/QuectelApps.dmg`, a disk image where the apps are dragged
+onto an Applications link:
 
 ```bash
-xattr -dr com.apple.quarantine QuectelMenu.app QuectelDebug.app
+scripts/bundle.sh --dmg
+```
+
+Sign the apps and the disk image with a certificate of your Apple developer
+team (a Developer ID certificate if the keychain has one, otherwise an Apple
+Development one):
+
+```bash
+DEVELOPMENT_TEAM=XXXXXXXXXX scripts/bundle.sh --dmg
+```
+
+- Without `DEVELOPMENT_TEAM` the apps are signed ad hoc, which needs no
+  Apple developer account. `install.sh` passes the variable on.
+- Other Macs open the apps without a warning only when they are signed with
+  a Developer ID certificate and notarised. For that, set `NOTARY_PROFILE`
+  to a profile saved with `xcrun notarytool store-credentials`.
+- The apps are built for the processor type of the Mac that builds them.
+- **Open at login** in the menu of the menu bar app starts it when you log
+  in. macOS lists it under System Settings, General, Login Items.
+- Every push also builds the disk image on GitHub Actions, signed ad hoc;
+  it is the `quectel-apps` artifact of a run (Apple silicon). macOS blocks
+  apps downloaded this way until the download mark is removed:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/QuectelMenu.app /Applications/QuectelDebug.app
 ```
 
 - The terminal options below also work on an installed app, for example
   `/Applications/QuectelMenu.app/Contents/MacOS/QuectelMenu --status`.
 
-Not tested on a Mac yet: the installed apps, their icons and **Open at
-login**.
+Not tested on a Mac yet: the installed apps, the disk image, signing with a
+team certificate, notarising and **Open at login**.
 
 ## Menu bar app
 
@@ -184,5 +203,5 @@ swift test
 - `Sources/QuectelMenu`: the menu bar app; `Messages.swift` is the SMS window.
 - `Sources/QuectelDebug/main.swift`: the debug window.
 - `Tests/ModemKitTests`: tests with a fake modem.
-- `scripts`: `bundle.sh` builds the app bundles, `make-icon.swift` draws
+- `scripts`: `bundle.sh` builds the app bundles and the disk image, `make-icon.swift` draws
   their icon, `install.sh` copies them into the Applications folder.
