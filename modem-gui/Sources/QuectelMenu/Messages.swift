@@ -130,7 +130,7 @@ final class MessagesWindow: NSObject, NSTableViewDataSource, NSTableViewDelegate
     private func showSelection() {
         let message = selected
         body.string = message.map { describe($0, dates: dates) + "\n\n" + $0.text } ?? ""
-        replyButton.isEnabled = message?.incoming == true
+        replyButton.isEnabled = message?.incoming == true && message?.addressIsName == false
             && SMSEncoder.normalizedNumber(message?.address ?? "") != nil
         deleteButton.isEnabled = message != nil
     }

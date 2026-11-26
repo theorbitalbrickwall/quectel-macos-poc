@@ -16,6 +16,8 @@ final class FakeModem: ByteTransport {
     var cancelled = false
     /// Never show the "> " prompt of AT+CMGS.
     var withholdPrompt = false
+    /// A line the modem sends on its own in the middle of the message list.
+    var listingNotice: String?
     private var promptLength: Int?
 
     init(replies: [String: String], stale: String = "") {
@@ -72,7 +74,9 @@ final class FakeModem: ByteTransport {
             for index in store.indices {
                 let entry = store[index]
                 let length = SMSEncoder.commandLength(ofPDU: entry.pdu)
-                text += "+CMGL: \(entry.index),\(entry.status),,\(length)\r\n\(entry.pdu)\r\n"
+                text += "+CMGL: \(entry.index),\(entry.status),,\(length)\r\n"
+                if let listingNotice { text += "\r\n\(listingNotice)\r\n" }
+                text += "\(entry.pdu)\r\n"
                 if entry.status == 0 { store[index].status = 1 }  // listing marks it read
             }
             return text + "\r\nOK"
@@ -367,6 +371,24 @@ enum PDU {
     static let turkishSingleShift = "0791947101670000440C910955153254760000621152220351401203240101486EE69BF41A14DE9CC39B31"
     static let turkishLockingShift = "0791947101670000440C91095515325476000062115222035140140325010100E6D3A0B3DFCD2ECB59A04ED90C"
 
+    /// From the name "05551234567", which looks like a phone number.
+    static let nameLikeNumber = "14D0B05AAD1693CD6835DB0D"
+    /// The phone number 05551234567.
+    static let number = "0B815055214365F7"
+
+    /// A received UCS-2 PDU on 2026-11-`day` at 22:`minute`:15 +01:00, for the
+    /// tests that need many variations. `part` is reference, total, sequence.
+    static func deliver(_ text: String, address: String = "0C91095515325476", day: Int = 25,
+                        minute: Int = 30, part: (Int, Int, Int)? = nil) -> String {
+        func hex(_ value: Int) -> String { String(format: "%02X", value) }
+        func swapped(_ value: Int) -> String { "\(value % 10)\(value / 10)" }
+        let header = part.map { "050003" + hex($0.0) + hex($0.1) + hex($0.2) } ?? ""
+        let body = text.utf16.map { String(format: "%04X", $0) }.joined()
+        return "0791947101670000" + (part == nil ? "04" : "44") + address + "0008"
+            + "6211" + swapped(day) + "22" + swapped(minute) + "5140"
+            + hex((header.count + body.count) / 2) + header + body
+    }
+
     static let submitGSM = "0001000C91095515325476000013C8329BFD066D50F7B79C4DDEA4409B720D"
     static let submitUCS2 = "0001000B815055214365F700083E004D0065007200680061006200610020006400FC006E00790061002C0020006E006100730131006C00730131006E003F0020011F00FC015F006900F600E7"
     static let submitUCS2Text = "Merhaba dünya, nasılsın? ğüşiöç"
@@ -494,6 +516,119 @@ final class SMSTests: XCTestCase {
         XCTAssertNil(SMSStore.usedCount(["+CMS ERROR: 302"]))
     }
 
+    private func stored(_ pdus: [String]) -> [SMSStoredPart] {
+        pdus.enumerated().map { SMSStoredPart(index: $0.offset, status: 0, pdu: SMSPDU(hex: $0.element)!) }
+    }
+
+    func testBuildsTestPDUs() {
+        let pdu = SMSPDU(hex: PDU.deliver("Selam ş", day: 26, minute: 5, part: (7, 3, 2)))
+        XCTAssertEqual(pdu?.text, "Selam ş")
+        XCTAssertEqual(pdu?.address, "+905551234567")
+        XCTAssertEqual(pdu?.part, SMSPDU.Part(reference: 7, total: 3, sequence: 2))
+        XCTAssertEqual(pdu?.timestamp, Date(timeIntervalSince1970: 1_795_642_215 + 86400 - 25 * 60))
+    }
+
+    func testCleansHostileText() {
+        XCTAssertEqual(SMSText.clean("a\u{1B}[2Jb\r\nc\rd\u{202E}e\u{9B}f\tg\u{0}h\u{2028}i"),
+                       "a\u{FFFD}[2Jb\nc\nd\u{FFFD}e\u{FFFD}f\tg\u{FFFD}h\ni")
+        XCTAssertEqual(SMSText.clean("Bank\r\nFrom x\ty", singleLine: true), "Bank From x y")
+        XCTAssertEqual(SMSText.clean("👨‍👩‍👧 İyi günler\n"), "👨‍👩‍👧 İyi günler\n")
+        // The raw PDU keeps what was sent; the message that is shown does not.
+        let hostile = PDU.deliver("x\u{1B}]0;title\u{07}y")
+        XCTAssertEqual(SMSPDU(hex: hostile)?.text, "x\u{1B}]0;title\u{07}y")
+        XCTAssertEqual(SMSStore.messages(stored([hostile])).first?.text, "x\u{FFFD}]0;title\u{FFFD}y")
+        let long = [PDU.deliver("a\u{1B}", part: (1, 2, 1)), PDU.deliver("[2Jb", part: (1, 2, 2))]
+        XCTAssertEqual(SMSStore.messages(stored(long)).first?.text, "a\u{FFFD}[2Jb")
+    }
+
+    func testSenderNameIsNotANumber() {
+        let named = SMSPDU(hex: PDU.deliver("Hi", address: PDU.nameLikeNumber))
+        XCTAssertEqual(named?.address, "05551234567")
+        XCTAssertEqual(named?.addressIsName, true)
+        XCTAssertEqual(SMSPDU(hex: PDU.deliver("Hi", address: PDU.number))?.address, "05551234567")
+        XCTAssertEqual(SMSPDU(hex: PDU.deliver("Hi", address: PDU.number))?.addressIsName, false)
+        XCTAssertEqual(SMSStore.messages(stored([PDU.deliver("Hi", address: PDU.nameLikeNumber)])).first?.addressIsName,
+                       true)
+        XCTAssertEqual(SMSStore.messages(stored([PDU.gsm])).first?.addressIsName, false)
+        // A name and a number that read the same are different senders.
+        let mixed = [PDU.deliver("one", address: PDU.number, part: (5, 2, 1)),
+                     PDU.deliver("two", address: PDU.nameLikeNumber, part: (5, 2, 2))]
+        XCTAssertEqual(SMSStore.messages(stored(mixed)).count, 2)
+        // More than 20 semi-octets of address are not allowed.
+        XCTAssertNil(SMSPDU(hex: PDU.deliver("Hi", address: "16D0" + String(repeating: "31", count: 11))))
+        XCTAssertNotNil(SMSPDU(hex: PDU.deliver("Hi", address: "14D0" + String(repeating: "31", count: 10))))
+    }
+
+    func testKeepsLongMessagesWithAReusedReferenceApart() {
+        func texts(_ pdus: [String]) -> [[Int]: String] {
+            Dictionary(uniqueKeysWithValues: SMSStore.messages(stored(pdus)).map { ($0.indices, $0.text) })
+        }
+        // A day apart, stored interleaved.
+        XCTAssertEqual(texts([PDU.deliver("A1", part: (9, 2, 1)), PDU.deliver("B1", day: 26, part: (9, 2, 1)),
+                              PDU.deliver("A2", part: (9, 2, 2)), PDU.deliver("B2", day: 26, part: (9, 2, 2))]),
+                       [[0, 2]: "A1A2", [1, 3]: "B1B2"])
+        // A day apart, each with one part only.
+        XCTAssertEqual(texts([PDU.deliver("A1", part: (9, 2, 1)), PDU.deliver("B2", day: 26, part: (9, 2, 2))]),
+                       [[0]: "A1 […] ", [1]: " […] B2"])
+        // At the same time, one after the other.
+        XCTAssertEqual(texts([PDU.deliver("A1", part: (9, 2, 1)), PDU.deliver("A2", part: (9, 2, 2)),
+                              PDU.deliver("B1", part: (9, 2, 1)), PDU.deliver("B2", part: (9, 2, 2))]),
+                       [[0, 1]: "A1A2", [2, 3]: "B1B2"])
+        // Minutes apart: the nearest in time wins.
+        XCTAssertEqual(texts([PDU.deliver("A1", minute: 10, part: (9, 2, 1)),
+                              PDU.deliver("B1", minute: 40, part: (9, 2, 1)),
+                              PDU.deliver("B2", minute: 41, part: (9, 2, 2))]),
+                       [[0]: "A1 […] ", [1, 2]: "B1B2"])
+        // The same part twice is one part; a different one in its place is not hidden.
+        XCTAssertEqual(texts([PDU.deliver("A1", part: (9, 2, 1)), PDU.deliver("A1", part: (9, 2, 1)),
+                              PDU.deliver("A2", part: (9, 2, 2)), PDU.deliver("X2", part: (9, 2, 2))]),
+                       [[0, 1, 2]: "A1A2", [3]: " […] X2"])
+    }
+
+    func testSkipsNoticesInTheMessageList() {
+        let parts = SMSStore.parts(["+CMGL: 0,1,,25", "RING", "+QIND: \"csq\",20,99", PDU.gsm,
+                                    "+CMGL: 1,0,,25", PDU.gsm, "RING"])
+        XCTAssertEqual(parts.map { $0.index }, [0, 1])
+        XCTAssertEqual(parts.map { $0.pdu.text }, [PDU.gsmText, PDU.gsmText])
+    }
+
+    func testSurvivesRandomPDUs() {
+        var state: UInt64 = 0x2545_F491_4F6C_DD1D
+        func next() -> Int {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Int(state >> 40) & 0xFF
+        }
+        let seeds = [PDU.gsm, PDU.ucs2, PDU.longUCS2[0], PDU.longGSM[0], PDU.alphanumeric, PDU.turkishSingleShift,
+                     PDU.turkishLockingShift, PDU.submitLongGSM[0]].map { Hex.bytes($0)! }
+        var parts: [SMSStoredPart] = []
+        for round in 0..<20000 {
+            var bytes = seeds[round % seeds.count]
+            if round % 4 == 3 {
+                bytes = (0..<next()).map { _ in UInt8(next()) }
+            } else {
+                for _ in 0...(next() % 4) { bytes[next() % bytes.count] = UInt8(next()) }
+                if next() % 4 == 0 { bytes.removeLast(next() % bytes.count) }
+            }
+            if let pdu = SMSPDU(hex: Hex.string(bytes)) {
+                parts.append(SMSStoredPart(index: round, status: next() % 4, pdu: pdu))
+            }
+        }
+        XCTAssertGreaterThan(parts.count, 5000)
+        let messages = SMSStore.messages(parts)
+        XCTAssertEqual(messages.flatMap { $0.indices }.sorted(), parts.map { $0.index })
+        func unsafe(_ scalar: Unicode.Scalar) -> Bool {
+            switch scalar.value {
+            case 0x09, 0x0A: return false
+            case 0x00...0x1F, 0x7F...0x9F, 0x202A...0x202E, 0x2066...0x2069, 0x2028, 0x2029: return true
+            default: return false
+            }
+        }
+        for message in messages {
+            XCTAssertFalse(message.text.unicodeScalars.contains(where: unsafe))
+            XCTAssertFalse(message.address.unicodeScalars.contains { unsafe($0) || $0 == "\n" || $0 == "\t" })
+        }
+    }
+
     func testEncodesShortMessages() {
         XCTAssertEqual(SMSEncoder.submitPDUs(to: "+905551234567", text: PDU.gsmText, reference: 0), [PDU.submitGSM])
         XCTAssertEqual(SMSEncoder.submitPDUs(to: "05551234567", text: PDU.submitUCS2Text, reference: 0),
@@ -549,6 +684,14 @@ final class SMSTests: XCTestCase {
 }
 
 final class SMSModemTests: XCTestCase {
+    func testListsMessagesAroundANotice() throws {
+        let fake = FakeModem(replies: [:])
+        fake.store = [(0, 1, PDU.gsm), (1, 0, PDU.ucs2)]
+        fake.listingNotice = "RING"
+        let messages = try Modem(channel: ATChannel(transport: fake)).messages()
+        XCTAssertEqual(messages.map { $0.text }.sorted(), [PDU.gsmText, PDU.ucs2Text].sorted())
+    }
+
     func testListsAndDeletesMessages() throws {
         let fake = FakeModem(replies: [:])
         fake.store = [(0, 1, PDU.longUCS2[0]), (2, 0, PDU.gsm), (5, 0, PDU.longUCS2[1])]
