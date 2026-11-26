@@ -69,8 +69,8 @@ xattr -dr com.apple.quarantine /Applications/QuectelMenu.app /Applications/Quect
   `/Applications/QuectelMenu.app/Contents/MacOS/QuectelMenu --status`.
 
 Apps signed with a Developer ID certificate start and reach the modem, and
-macOS accepts the notarised disk image. Not tested: **Open at login** and a
-download on another Mac.
+macOS accepts the notarised disk image. **Open at login** adds the login
+item. Not tested: the start at the next login and a download on another Mac.
 
 ## Menu bar app
 
