@@ -7,6 +7,51 @@ touch the data connection, so they work next to ECM (or the QMI tool).
 - `QuectelDebug`: a window for debugging, in the spirit of Quectel's QNavigator
   for Windows. See [Debug window](#debug-window).
 
+## Install
+
+Needs the Xcode command line tools. This builds `QuectelMenu.app` and
+`QuectelDebug.app` and copies them into `/Applications`:
+
+```bash
+scripts/install.sh
+```
+
+Into another folder:
+
+```bash
+DESTINATION=~/Applications scripts/install.sh
+```
+
+Remove them again:
+
+```bash
+scripts/install.sh --uninstall
+```
+
+Only build the apps, into `build/`:
+
+```bash
+scripts/bundle.sh
+```
+
+- The apps are signed ad hoc, without an Apple developer account, and are
+  built for the processor type of the Mac that builds them.
+- **Open at login** in the menu of the menu bar app starts it when you log
+  in. macOS lists it under System Settings, General, Login Items.
+- Every push also builds the apps on GitHub Actions; the `quectel-apps`
+  artifact of a run holds them as a zip (Apple silicon). macOS blocks apps
+  downloaded this way until the download mark is removed:
+
+```bash
+xattr -dr com.apple.quarantine QuectelMenu.app QuectelDebug.app
+```
+
+- The terminal options below also work on an installed app, for example
+  `/Applications/QuectelMenu.app/Contents/MacOS/QuectelMenu --status`.
+
+Not tested on a Mac yet: the installed apps, their icons and **Open at
+login**.
+
 ## Menu bar app
 
 Shows: technology and signal bars in the menu bar; operator, band, RSRP / RSRQ
@@ -42,7 +87,7 @@ until the window is opened.
 
 ### Run
 
-Needs the Xcode command line tools, nothing else:
+Without installing:
 
 ```bash
 swift run -c release QuectelMenu
@@ -139,3 +184,5 @@ swift test
 - `Sources/QuectelMenu`: the menu bar app; `Messages.swift` is the SMS window.
 - `Sources/QuectelDebug/main.swift`: the debug window.
 - `Tests/ModemKitTests`: tests with a fake modem.
+- `scripts`: `bundle.sh` builds the app bundles, `make-icon.swift` draws
+  their icon, `install.sh` copies them into the Applications folder.

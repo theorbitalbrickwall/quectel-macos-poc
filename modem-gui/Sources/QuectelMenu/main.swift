@@ -8,6 +8,7 @@
 //   swift run QuectelMenu --send-sms NUMBER TEXT send one SMS and exit
 import AppKit
 import ModemKit
+import ServiceManagement
 
 let serialPort = "/dev/cu.quectel2"
 
@@ -263,11 +264,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = add("New message…", #selector(newMessage), enabled: status != nil)
         menu.addItem(.separator())
         _ = add("Refresh now", #selector(refresh))
+        // Only an installed app can be a login item, not `swift run`.
+        if Bundle.main.bundleURL.pathExtension == "app" {
+            add("Open at login", #selector(toggleOpenAtLogin)).state =
+                SMAppService.mainApp.status == .enabled ? .on : .off
+        }
         _ = add("Quit", #selector(quit))
         item.menu = menu
     }
 
     @objc private func noop() {}
+
+    @objc private func toggleOpenAtLogin() {
+        do {
+            if SMAppService.mainApp.status == .enabled {
+                try SMAppService.mainApp.unregister()
+            } else {
+                try SMAppService.mainApp.register()
+            }
+        } catch {
+            show("Open at login was not changed", detail: error.localizedDescription)
+        }
+        rebuildMenu()
+    }
 
     @objc private func quit() {
         NSApp.terminate(nil)

@@ -174,7 +174,8 @@ final class DebugController: NSObject, NSApplicationDelegate, NSOutlineViewDataS
     // ------------------------------------------------------------ set-up
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.applicationIconImage = appIcon()
+        // The app bundle has its own icon; `swift run` has none.
+        if Bundle.main.bundleURL.pathExtension != "app" { NSApp.applicationIconImage = appIcon() }
         buildMenu()
         buildWindow()
         rescan()
