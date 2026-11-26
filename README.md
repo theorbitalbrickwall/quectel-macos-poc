@@ -67,7 +67,7 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27.
 | `modem-gui`: menu bar app | Compiles | Works through the driver and over direct USB. Not tested: setting the APN |
 | `modem-gui`: SMS | Unit-tested against a fake modem | Works |
 | `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | Read-only commands work through the driver and over direct USB. Not tested: commands that change the modem, typed commands, Save Log |
-| `modem-gui`: installable apps | Apps and disk image are built and signed ad hoc in CI | Not tested: the installed apps, the disk image, team signing, Open at login |
+| `modem-gui`: installable apps | Apps and disk image are built and signed ad hoc in CI | Signed with a Developer ID certificate, the apps start and reach the modem over direct USB. Not tested: notarising, Open at login |
 | `quectel_at.py`, serial port | 7 tests against a fake modem | Works through the driver's ports |
 | `quectel_at.py`, raw USB | | Works without root. Cannot be used while the driver is installed |
 | `serial-driver`: driver and installer | Compiles; logic fuzzed against a fake DriverKit | Ports 1 to 3 appear; AT commands work on 2 and 3, NMEA data arrives on 1. Not tested: PPP, unplugging while open |
