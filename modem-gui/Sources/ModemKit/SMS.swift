@@ -169,6 +169,9 @@ public struct SMSPDU: Equatable {
     public var kind: Kind
     /// Sender of a received message, recipient of a sent one.
     public var address = ""
+    /// True when the address is a name (alphanumeric), not a phone number.
+    /// A name may look like a number but cannot be written to.
+    public var addressIsName = false
     /// Service centre time stamp; received messages only.
     public var timestamp: Date?
     /// The text as UTF-16. Kept as code units because an emoji may be split
@@ -212,9 +215,11 @@ public struct SMSPDU: Equatable {
             guard byte() != nil else { return nil }  // message reference
         }
 
-        guard let addressLength = byte(), let addressType = byte(),
+        // TS 23.040 section 9.1.2.5: at most 10 octets of address value.
+        guard let addressLength = byte(), addressLength <= 20, let addressType = byte(),
               let addressBytes = take((addressLength + 1) / 2) else { return nil }
         address = SMSPDU.address(addressBytes, semiOctets: addressLength, type: addressType)
+        addressIsName = (addressType >> 4) & 0x07 == 5
 
         guard byte() != nil, let coding = byte() else { return nil }  // protocol identifier, coding
         if kind == .deliver {
@@ -340,6 +345,37 @@ public struct SMSPDU: Equatable {
         components.minute = decimal(bytes[4])
         components.second = decimal(bytes[5])
         return calendar.date(from: components)
+    }
+}
+
+/// Message text and sender names come from the network and may hold any
+/// character. This makes them safe for a window and for a terminal.
+public enum SMSText {
+    static let replacement: Unicode.Scalar = "\u{FFFD}"
+
+    /// Line ends become "\n" (a space with `singleLine`). Other control
+    /// characters, and the characters that override the text direction, become
+    /// U+FFFD.
+    public static func clean(_ text: String, singleLine: Bool = false) -> String {
+        var scalars = String.UnicodeScalarView()
+        var afterReturn = false
+        for scalar in text.unicodeScalars {
+            let wasReturn = afterReturn
+            afterReturn = scalar == "\r"
+            switch scalar.value {
+            case 0x0A where wasReturn:
+                continue  // second half of CR LF
+            case 0x0A, 0x0D, 0x85, 0x2028, 0x2029:
+                scalars.append(singleLine ? " " : "\n")
+            case 0x09:
+                scalars.append(singleLine ? " " : scalar)
+            case 0x00...0x1F, 0x7F...0x9F, 0x202A...0x202E, 0x2066...0x2069:
+                scalars.append(replacement)
+            default:
+                scalars.append(scalar)
+            }
+        }
+        return String(scalars)
     }
 }
 
@@ -473,13 +509,16 @@ public struct SMSMessage: Equatable {
     public var address: String
     public var timestamp: Date?
     public var text: String
+    /// True when the sender is a name, which cannot be replied to.
+    public var addressIsName = false
     /// Parts of a long message that are not in the storage (yet).
     public var missingParts = 0
 }
 
 public enum SMSStore {
     /// Parse the body of `AT+CMGL=4`: a `+CMGL: <index>,<stat>,[<alpha>],<length>`
-    /// line followed by a line with the PDU.
+    /// line followed by a line with the PDU. Lines in between that are not
+    /// hex (the modem's own notices) are skipped.
     public static func parts(_ lines: [String]) -> [SMSStoredPart] {
         var parts: [SMSStoredPart] = []
         var index = 0
@@ -490,30 +529,59 @@ public enum SMSStore {
             let values = ATParser.fields(String(line.dropFirst("+CMGL:".count)))
             guard values.count >= 2, let slot = Int(values[0]), let status = Int(values[1]) else { continue }
             var pdu = SMSPDU(kind: .other)
-            if index < lines.count, !lines[index].hasPrefix("+CMGL:") {
-                pdu = SMSPDU(hex: lines[index]) ?? pdu
+            while index < lines.count, !lines[index].hasPrefix("+CMGL:") {
+                let candidate = lines[index]
                 index += 1
+                if Hex.bytes(candidate) != nil {
+                    pdu = SMSPDU(hex: candidate) ?? pdu
+                    break
+                }
             }
             parts.append(SMSStoredPart(index: slot, status: status, pdu: pdu))
         }
         return parts
     }
 
+    /// Parts of one long message reach the service centre close together.
+    static let partWindow: TimeInterval = 3600
+
+    /// Whether `part` can belong to `group`: its place is free (or holds the
+    /// same part again) and its time stamp is near the group's. Returns the
+    /// distance in time, nil when it cannot.
+    static func partGap(from part: SMSStoredPart, to group: [SMSStoredPart]) -> TimeInterval? {
+        if let twin = group.first(where: { $0.pdu.part?.sequence == part.pdu.part?.sequence }),
+           twin.pdu != part.pdu {
+            return nil
+        }
+        guard let time = part.pdu.timestamp, let other = group[0].pdu.timestamp else { return 0 }
+        let distance = abs(time.timeIntervalSince(other))
+        return distance <= partWindow ? distance : nil
+    }
+
     /// Join the parts of long messages. Newest first; messages without a
-    /// time stamp (stored sent ones) come last.
+    /// time stamp (stored sent ones) come last. The reference number of a
+    /// long message is reused sooner or later, so parts only join a message
+    /// that still lacks them and is close in time.
     public static func messages(_ parts: [SMSStoredPart]) -> [SMSMessage] {
         var groups: [[SMSStoredPart]] = []
-        var groupOfKey: [String: Int] = [:]
+        var groupsOfKey: [String: [Int]] = [:]
         for part in parts {
             guard let position = part.pdu.part else {
                 groups.append([part])
                 continue
             }
-            let key = "\(part.pdu.kind)|\(part.pdu.address)|\(position.reference)|\(position.total)"
-            if let group = groupOfKey[key] {
-                groups[group].append(part)
+            let key = "\(part.pdu.kind)|\(part.pdu.addressIsName)|\(part.pdu.address)|"
+                + "\(position.reference)|\(position.total)"
+            var best: (group: Int, gap: TimeInterval)?
+            for group in groupsOfKey[key] ?? [] {
+                if let gap = partGap(from: part, to: groups[group]), gap < best?.gap ?? .infinity {
+                    best = (group, gap)
+                }
+            }
+            if let best {
+                groups[best.group].append(part)
             } else {
-                groupOfKey[key] = groups.count
+                groupsOfKey[key, default: []].append(groups.count)
                 groups.append([part])
             }
         }
@@ -523,9 +591,10 @@ public enum SMSStore {
             var message = SMSMessage(indices: group.map { $0.index }.sorted(),
                                      incoming: first.pdu.kind == .deliver,
                                      unread: group.contains { $0.status == 0 },
-                                     address: first.pdu.address,
+                                     address: SMSText.clean(first.pdu.address, singleLine: true),
                                      timestamp: group.compactMap { $0.pdu.timestamp }.min(),
-                                     text: "")
+                                     text: "",
+                                     addressIsName: first.pdu.addressIsName)
             if first.pdu.kind == .other {
                 message.incoming = first.status <= 1
                 message.text = "(This kind of message cannot be shown.)"
@@ -542,9 +611,9 @@ public enum SMSStore {
                         gap = true
                     }
                 }
-                message.text = String(decoding: units, as: UTF16.self)
+                message.text = SMSText.clean(String(decoding: units, as: UTF16.self))
             } else {
-                message.text = first.pdu.text
+                message.text = SMSText.clean(first.pdu.text)
             }
             return message
         }

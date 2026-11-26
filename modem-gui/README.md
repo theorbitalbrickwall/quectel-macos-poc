@@ -31,6 +31,11 @@ until the window is opened.
   emoji. Long messages are split when sent and joined when received.
 - The app uses the storage the modem is set to (`AT+CPMS`) and switches the
   port to PDU mode (`AT+CMGF=0`, the modem's default).
+- Messages come from the network and are not trusted: control characters
+  and characters that change the text direction are shown as "�", and a
+  sender that is a name instead of a number cannot be replied to.
+- Parts of a long message are joined only when they arrived within an hour
+  of each other.
 - Sent messages are not kept.
 - Reading the list marks the messages as read on the modem, so after a
   restart of the app they no longer count as new.
