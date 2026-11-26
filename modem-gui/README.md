@@ -46,11 +46,11 @@ Shows: technology and signal bars in the menu bar; operator, band, RSRP / RSRQ
 / SINR / RSSI, registration, SIM state, APN, IP address and USB network mode in
 the menu.
 
-Controls: set the APN, switch the USB network mode (with a reboot), send a raw
-AT command, read, delete and send SMS.
+Controls: set the APN, switch the USB network mode (with a reboot), switch the
+eSIM profile, send a raw AT command, read, delete and send SMS.
 
 Works on a real modem, through the serial driver and over direct USB, except
-that setting the APN has not been tried. See
+that setting the APN and the eSIM menu have not been tried. See
 [Status in the top-level README](../README.md#status).
 
 ### SMS
@@ -72,6 +72,23 @@ until the window is opened.
 - Sent messages are not kept.
 - Reading the list marks the messages as read on the modem, so after a
   restart of the app they no longer count as new.
+
+### eSIM
+
+With an eSIM in the modem, the **eSIM** submenu shows its EID (click to copy
+it) and the installed profiles with their ICCID. The profile in use has a
+check mark. Choosing another one switches to it, after a confirmation; the
+data connection drops until the modem has registered with the new profile.
+
+- This uses the modem's own `AT+QESIM` commands. Without an eSIM, or with a
+  firmware that lacks the command, the submenu is not shown.
+- The eSIM is read when the app finds the modem, when the SIM state changes
+  and on **Refresh now**, not at every poll.
+- Profiles cannot be downloaded, renamed or deleted here.
+
+Not tested on hardware. The modem's answers to the EID and list commands were
+seen on an EC25-EUX and are what the parser is tested with; switching has not
+been tried.
 
 ### Run
 
@@ -99,13 +116,19 @@ Send one SMS from the terminal:
 swift run -c release QuectelMenu --send-sms +491701234567 "Merhaba dünya"
 ```
 
+The eSIM's EID and profiles in the terminal:
+
+```bash
+swift run -c release QuectelMenu --esim
+```
+
 ## Debug window
 
 ```bash
 swift run -c release QuectelDebug
 ```
 
-- Left: a list of ready-made AT commands, in groups (module, SIM, network,
+- Left: a list of ready-made AT commands, in groups (module, SIM, eSIM, network,
   data, USB, GNSS, SMS, power). Double-click one to send it. Commands with an
   orange warning triangle change the modem's state and ask first. Commands
   with a blue pencil have values to fill in, so they are put in the input
@@ -168,6 +191,7 @@ swift test
 ## Files
 
 - `Sources/ModemKit`: AT parsing, AT channel, status model, SMS (`SMS.swift`),
+  eSIM profiles (`ESIM.swift`),
   serial and USB transports, the port monitor and the command list of the debug window.
 - `Sources/QuectelMenu`: the menu bar app; `Messages.swift` is the SMS window.
 - `Sources/QuectelDebug/main.swift`: the debug window.

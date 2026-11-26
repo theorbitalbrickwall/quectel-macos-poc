@@ -6,6 +6,7 @@
 //   swift run QuectelMenu --status   print one status poll and exit
 //   swift run QuectelMenu --messages             print the stored SMS and exit
 //   swift run QuectelMenu --send-sms NUMBER TEXT send one SMS and exit
+//   swift run QuectelMenu --esim                 print the eSIM profiles and exit
 import AppKit
 import ModemKit
 import ServiceManagement
@@ -108,6 +109,22 @@ if let flag = CommandLine.arguments.firstIndex(of: "--send-sms") {
     }
 }
 
+func title(of profile: ESIMProfile) -> String {
+    profile.name == profile.iccid ? profile.iccid : "\(profile.name) (\(profile.iccid))"
+}
+
+if CommandLine.arguments.contains("--esim") {
+    runOnce { modem in
+        guard let esim = try modem.esim() else {
+            print("No eSIM.")
+            return
+        }
+        print((["EID: \(esim.eid)"] + esim.profiles.map {
+            ($0.enabled ? "* " : "  ") + title(of: $0)
+        }).joined(separator: "\n"))
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     /// All modem I/O happens here, one command at a time.
@@ -125,6 +142,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Stored message count at the last listing. Worker queue only.
     private var listedCount: Int?
     private var refreshPending = false
+    private var esim: ESIMInfo?
+    /// The eSIM is read again when this is false or the SIM state differs
+    /// from `esimSIM`, not at every poll. Worker queue only.
+    private var esimLoaded = false
+    private var esimSIM: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         item.button?.title = "Modem…"
@@ -150,10 +172,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Reopen next time: the modem may have been replugged or rebooted.
                 self.modem?.channel.close()
                 self.modem = nil
+                self.esimLoaded = false
             }
             DispatchQueue.main.async {
                 if let failure {
                     self.status = nil
+                    self.esim = nil
                     self.problem = failure.localizedDescription
                 }
                 self.rebuildMenu()
@@ -200,9 +224,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.listedCount = nil
                 listed = []
             }
+            let reload = !self.esimLoaded || status.sim != self.esimSIM
+            var chip: ESIMInfo?
+            if reload {
+                // Not worth failing the poll for.
+                chip = try? modem.esim()
+                self.esimLoaded = true
+                self.esimSIM = status.sim
+            }
             DispatchQueue.main.async {
                 self.status = status
                 self.problem = nil
+                if reload { self.esim = chip }
                 if let listed { self.received(listed) }
             }
         }) { _ in
@@ -257,13 +290,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             submenu.addItem(entry)
         }
         modes.submenu = submenu
+        if let esim, status != nil {
+            let chip = NSMenu()
+            chip.autoenablesItems = false
+            let eid = NSMenuItem(title: "EID: \(esim.eid)", action: #selector(copyEID), keyEquivalent: "")
+            eid.target = self
+            eid.toolTip = "Click to copy"
+            chip.addItem(eid)
+            chip.addItem(.separator())
+            if esim.profiles.isEmpty {
+                chip.addItem(withTitle: "No profiles", action: nil, keyEquivalent: "").isEnabled = false
+            }
+            for profile in esim.profiles {
+                let entry = NSMenuItem(title: title(of: profile), action: #selector(enableProfile(_:)),
+                                       keyEquivalent: "")
+                entry.target = self
+                entry.representedObject = profile.iccid
+                entry.state = profile.enabled ? .on : .off
+                chip.addItem(entry)
+            }
+            add("eSIM", #selector(noop)).submenu = chip
+        }
         _ = add("Send AT command…", #selector(sendCommand), enabled: status != nil)
         menu.addItem(.separator())
         _ = add(unseen.isEmpty ? "Messages…" : "Messages (\(unseen.count) new)…", #selector(showMessages),
                 enabled: status != nil)
         _ = add("New message…", #selector(newMessage), enabled: status != nil)
         menu.addItem(.separator())
-        _ = add("Refresh now", #selector(refresh))
+        _ = add("Refresh now", #selector(refreshNow))
         // Only an installed app can be a login item, not `swift run`.
         if Bundle.main.bundleURL.pathExtension == "app" {
             add("Open at login", #selector(toggleOpenAtLogin)).state =
@@ -340,6 +394,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The modem is rebooting; drop the connection so the next poll reopens it.
             throw ModemError.io("The modem is rebooting into \(mode.label)…")
         })
+    }
+
+    /// A poll that also reads the eSIM again.
+    @objc private func refreshNow() {
+        worker.async { self.esimLoaded = false }
+        refresh()
+    }
+
+    @objc private func copyEID() {
+        guard let eid = esim?.eid else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(eid, forType: .string)
+    }
+
+    @objc private func enableProfile(_ sender: NSMenuItem) {
+        guard let iccid = sender.representedObject as? String,
+              let profile = esim?.profiles.first(where: { $0.iccid == iccid }),
+              !profile.enabled else { return }
+        let alert = makeAlert()
+        alert.messageText = "Switch the eSIM to \(profile.name)?"
+        alert.informativeText = "The profile in use is replaced by \(title(of: profile)). "
+            + "The data connection drops until the modem has registered with the new profile."
+        alert.addButton(withTitle: "Switch")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        perform({ modem in
+            try modem.enableESIMProfile(profile)
+            self.esimLoaded = false
+        }) { error in
+            if let error { self.show("The eSIM profile was not changed", detail: error.localizedDescription) }
+            self.refreshNow()
+        }
     }
 
     @objc private func showMessages() {
