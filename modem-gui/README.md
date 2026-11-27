@@ -53,8 +53,9 @@ Works on a real modem, through the serial driver and over direct USB. A new
 APN shows in the menu at once, but the data connection keeps the old one until
 the modem attaches again, for example after it is unplugged and plugged back
 in. After setting the APN the app asks whether to reboot the modem, which
-brings it back on the new APN after about 20 seconds; this reboot has only been
-tried over direct USB. See
+brings it back on the new APN after about 25 seconds; the menu says that the
+modem is rebooting until then. This reboot has only been tried over direct
+USB. See
 [Status in the top-level README](../README.md#status).
 
 ### SMS
