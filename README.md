@@ -63,8 +63,8 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27.
 | Item | Without hardware | On hardware |
 | --- | --- | --- |
 | `qmi-userspace` | 28 tests against a simulated modem | `info` and `connect` work. Not tested: speed, long sessions |
-| `modem-gui`: `ModemKit` | 47 unit tests | |
-| `modem-gui`: menu bar app | Compiles | Works through the driver and over direct USB. A new APN is used after the modem re-attaches. Not tested: the reboot offered after setting the APN |
+| `modem-gui`: `ModemKit` | 54 unit tests | |
+| `modem-gui`: menu bar app | Compiles | Works through the driver and over direct USB. A new APN is used after the modem re-attaches; the reboot offered for that is only tested over direct USB |
 | `modem-gui`: SMS | Unit-tested against a fake modem | Works |
 | `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | Read-only commands work through the driver and over direct USB. Not tested: commands that change the modem, typed commands, Save Log |
 | `modem-gui`: installable apps | Apps and disk image build in CI | Work, signed and notarised. Not tested: the start at login, a download on another Mac |
