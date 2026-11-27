@@ -37,8 +37,8 @@ scripts/bundle.sh --dmg
 - GitHub Actions builds the disk image on every push (artifact
   `quectel-apps`, ad hoc, Apple silicon).
 
-Works on a Mac, signed and notarised. Not tested: the start at the next
-login, and a download on another Mac.
+Works on a Mac, signed and notarised, including the start at login. Not
+tested: a download on another Mac.
 
 ## Menu bar app
 
