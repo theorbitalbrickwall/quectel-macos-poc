@@ -137,8 +137,9 @@ extension Modem {
         return ESIMInfo(eid: eid, profiles: list.ok ? ESIMParser.profiles(list.body) ?? [] : [])
     }
 
-    /// Make `profile` the active one. Only `enable` is sent: the note does not
-    /// ask for the profile in use to be disabled first.
+    /// Make `profile` the active one. Only `enable` is sent: the eSIM disables
+    /// the profile in use as part of enabling another, and leaves both as
+    /// they were when that fails (GSMA SGP.22 V3.0, 3.2.1 and 5.7.16).
     public func enableESIMProfile(_ profile: ESIMProfile) throws {
         guard ESIMParser.isValidICCID(profile.iccid) else {
             throw ModemError.rejected("This is not an ICCID.")

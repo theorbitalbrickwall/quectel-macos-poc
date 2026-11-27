@@ -84,6 +84,8 @@ it) and the installed profiles with their ICCID. The profile in use has a
 check mark. Choosing another one switches to it, after a confirmation; the
 data connection drops until the modem has registered with the new profile.
 
+- Switching sends one command, to enable the chosen profile. The eUICC
+  disables the profile in use itself, and keeps it when the switch fails.
 - This uses the modem's own `AT+QESIM` commands. Without an eUICC, or with a
   firmware that lacks the command, the submenu is not shown.
 - Profile names come from the operator and are not trusted: they are cleaned
