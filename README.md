@@ -115,7 +115,9 @@ Projects the code follows:
   here. The eSIM commands (`AT+QESIM`) and their error codes are from
   Quectel's EC2x&EG2x&EG9x&EM05 Series eSIM LPA Application Note V1.0. The
   debug window is modelled on Quectel's QNavigator tool for Windows.
-- The GSMA specification SGP.22 (RSP Technical Specification, V3.0): what enabling an eSIM profile does to
+- The GSMA specification
+  [SGP.22](https://www.gsma.com/solutions-and-impact/technologies/esim/gsma_resources/sgp-22-v3-0/)
+  (RSP Technical Specification, V3.0): what enabling an eSIM profile does to
   the profile in use, and the meaning of the eSIM error codes.
 - The 3GPP specifications
   [TS 23.040](https://www.3gpp.org/dynareport/23040.htm) and
