@@ -1028,6 +1028,12 @@ final class ESIMTests: XCTestCase {
         XCTAssertNil(try Modem(channel: ATChannel(transport: failing)).esim())
     }
 
+    func testNoESIMInfoWhenTheListFails() throws {
+        let fake = makeFake()
+        fake.replies["AT+QESIM=\"list\""] = "+QESIM: \"list\",1,2,6985\r\n\r\nOK"
+        XCTAssertNil(try Modem(channel: ATChannel(transport: fake)).esim())
+    }
+
     func testEnablesAProfile() throws {
         let fake = makeFake()
         let modem = Modem(channel: ATChannel(transport: fake))

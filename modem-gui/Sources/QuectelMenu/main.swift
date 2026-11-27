@@ -163,6 +163,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// from `esimSIM`, not at every poll. Worker queue only.
     private var esimLoaded = false
     private var esimSIM: String?
+    /// The last read found an eSIM, and how often it has not answered since.
+    /// Worker queue only.
+    private var esimKnown = false
+    private var esimRetries = 0
+    /// Until when a SIM error is the expected effect of a profile switch.
+    private var switchingUntil: Date?
     /// Set while the modem restarts on our request.
     private var reboot: RebootWatch?
 
@@ -249,11 +255,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             let reload = !self.esimLoaded || status.sim != self.esimSIM
             var chip: ESIMInfo?
+            var keep = false
             if reload {
                 // Not worth failing the poll for.
                 chip = try? modem.esim()
-                self.esimLoaded = true
                 self.esimSIM = status.sim
+                if chip == nil, self.esimKnown, self.esimRetries < 6 {
+                    // An eSIM may not answer while it restarts after a switch:
+                    // keep what the menu shows and ask again at the next poll.
+                    self.esimRetries += 1
+                    self.esimLoaded = false
+                    keep = true
+                } else {
+                    self.esimLoaded = true
+                    self.esimKnown = chip != nil
+                    self.esimRetries = 0
+                }
             }
             DispatchQueue.main.async {
                 if let reboot = self.reboot, !reboot.isBack(status) {
@@ -264,7 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.status = status
                     self.problem = nil
                 }
-                if reload { self.esim = chip }
+                if reload && !keep { self.esim = chip }
                 if let listed { self.received(listed) }
             }
         }) { error in
@@ -304,7 +321,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return entry
         }
         if let status {
-            for line in describe(status) { _ = add(line) }
+            let switching = switchingUntil.map { Date() < $0 } ?? false
+            for line in describe(status) {
+                // The SIM is gone for a moment while the eSIM changes profile.
+                _ = add(switching && line.hasPrefix("SIM: +CME ERROR") ? "SIM: switching profile…" : line)
+            }
         } else {
             _ = add(problem ?? "Looking for the modem…")
         }
@@ -479,11 +500,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
+        item.button?.title = "Switching eSIM…"
         perform({ modem in
             try modem.enableESIMProfile(profile)
             self.esimLoaded = false
         }) { error in
-            if let error { self.show("The eSIM profile was not changed", detail: error.localizedDescription) }
+            if let error {
+                self.show("The eSIM profile was not changed", detail: error.localizedDescription)
+            } else {
+                self.switchingUntil = Date().addingTimeInterval(30)
+                self.rebuildMenu()
+            }
             self.refreshNow()
         }
     }

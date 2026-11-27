@@ -129,12 +129,14 @@ extension Modem {
     /// The note gives 6 s as the longest response time of every command here.
     private static let esimTimeout: TimeInterval = 10
 
-    /// Nil when the modem has no eSIM, or its firmware no `AT+QESIM`.
+    /// Nil when the modem has no eSIM, its firmware no `AT+QESIM`, or the eSIM
+    /// does not answer just now.
     public func esim() throws -> ESIMInfo? {
         let answer = try channel.command("AT+QESIM=\"eid\"", timeout: Self.esimTimeout)
         guard answer.ok, let eid = ESIMParser.eid(answer.body) else { return nil }
         let list = try channel.command("AT+QESIM=\"list\"", timeout: Self.esimTimeout)
-        return ESIMInfo(eid: eid, profiles: list.ok ? ESIMParser.profiles(list.body) ?? [] : [])
+        guard list.ok, let profiles = ESIMParser.profiles(list.body) else { return nil }
+        return ESIMInfo(eid: eid, profiles: profiles)
     }
 
     /// Make `profile` the active one. Only `enable` is sent: the eSIM disables
