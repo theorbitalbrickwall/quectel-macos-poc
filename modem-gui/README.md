@@ -136,6 +136,12 @@ The eSIM's EID and profiles in the terminal:
 swift run -c release QuectelMenu --esim
 ```
 
+Switch to the profile with this ICCID, without a confirmation:
+
+```bash
+swift run -c release QuectelMenu --esim-enable 8932042000000199885F
+```
+
 ## Debug window
 
 ```bash

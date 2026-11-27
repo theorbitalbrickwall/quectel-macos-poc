@@ -7,6 +7,7 @@
 //   swift run QuectelMenu --messages             print the stored SMS and exit
 //   swift run QuectelMenu --send-sms NUMBER TEXT send one SMS and exit
 //   swift run QuectelMenu --esim                 print the eSIM profiles and exit
+//   swift run QuectelMenu --esim-enable ICCID    switch the eSIM profile and exit
 import AppKit
 import ModemKit
 import ServiceManagement
@@ -122,6 +123,21 @@ if CommandLine.arguments.contains("--esim") {
         print((["EID: \(esim.eid)"] + esim.profiles.map {
             ($0.enabled ? "* " : "  ") + title(of: $0)
         }).joined(separator: "\n"))
+    }
+}
+
+if let flag = CommandLine.arguments.firstIndex(of: "--esim-enable") {
+    guard CommandLine.arguments.count == flag + 2 else {
+        FileHandle.standardError.write(Data("usage: QuectelMenu --esim-enable ICCID\n".utf8))
+        exit(2)
+    }
+    runOnce { modem in
+        let iccid = CommandLine.arguments[flag + 1]
+        guard let profile = try modem.esim()?.profiles.first(where: { $0.iccid == iccid }) else {
+            throw ModemError.notFound("There is no eSIM profile with this ICCID.")
+        }
+        try modem.enableESIMProfile(profile)
+        print("Enabled \(title(of: profile)).")
     }
 }
 
