@@ -53,8 +53,14 @@ table of what is and is not verified.
 - `serial-driver/`: DriverKit serial driver (`Driver/`), installer app
   (`Installer/`), XcodeGen project (`project.yml`), and
   `tools/quectel_at.py` (AT commands over a serial port or raw USB).
+- `Makefile`: thin wrapper over the scripts (`make` lists the targets; CI
+  calls them). Keep it working with GNU make 3.81, the one macOS ships, and
+  give every new target a `## ` description so that it shows in the list.
 
 ## Tests
+
+`make test` runs the Python tests, and the Swift tests on macOS; `make fuzz`
+runs the fuzzer. The commands behind them:
 
 ```bash
 python3 qmi-userspace/test_qmi.py
