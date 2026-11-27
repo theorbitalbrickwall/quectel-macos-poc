@@ -147,6 +147,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// from `esimSIM`, not at every poll. Worker queue only.
     private var esimLoaded = false
     private var esimSIM: String?
+    /// Set while the modem restarts on our request.
+    private var reboot: RebootWatch?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         item.button?.title = "Modem…"
@@ -178,7 +180,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let failure {
                     self.status = nil
                     self.esim = nil
-                    self.problem = failure.localizedDescription
+                    if let reboot = self.reboot, reboot.isActive() {
+                        self.problem = reboot.message
+                    } else {
+                        self.reboot = nil
+                        self.problem = failure.localizedDescription
+                    }
                 }
                 self.rebuildMenu()
                 then?(failure)
@@ -233,13 +240,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.esimSIM = status.sim
             }
             DispatchQueue.main.async {
-                self.status = status
-                self.problem = nil
+                if let reboot = self.reboot, !reboot.isBack(status) {
+                    self.status = nil
+                    self.problem = reboot.message
+                } else {
+                    self.reboot = nil
+                    self.status = status
+                    self.problem = nil
+                }
                 if reload { self.esim = chip }
                 if let listed { self.received(listed) }
             }
-        }) { _ in
+        }) { error in
             self.refreshPending = false
+            if error != nil { self.reboot?.pollFailed() }
         }
     }
 
@@ -372,10 +386,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let context = status?.contexts.first,
               let apn = ask("Set APN", detail: "Applies to context \(context.cid) (\(context.type)). "
                   + "It is used the next time the modem attaches to the network.",
-                  value: context.apn) else { return }
+                  value: context.apn), apn != context.apn else { return }
         perform({ try $0.setAPN(apn, context: context) }) { error in
-            if let error { self.show("The APN was not changed", detail: error.localizedDescription) }
-            self.refresh()
+            if let error {
+                self.show("The APN was not changed", detail: error.localizedDescription)
+                self.refresh()
+            } else {
+                self.offerReboot()
+            }
+        }
+    }
+
+    /// A stored APN is only used once the modem attaches again; a reboot does that.
+    private func offerReboot() {
+        let alert = makeAlert()
+        alert.messageText = "Reboot the modem now?"
+        alert.informativeText = "The new APN is stored. The data connection keeps the old one until "
+            + "the modem attaches to the network again. A reboot does that; the current data "
+            + "connection drops while the modem restarts."
+        alert.addButton(withTitle: "Reboot")
+        alert.addButton(withTitle: "Later")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            refresh()
+            return
+        }
+        rebootModem(note: "The modem is rebooting…") { $0.reboot() }
+    }
+
+    /// Run `work`, which ends in a reboot, and show `note` until the modem is back.
+    private func rebootModem(note: String, _ work: @escaping (Modem) throws -> Void) {
+        let started = ModemError.io(note)
+        perform({ modem in
+            try work(modem)
+            // The modem is rebooting; drop the connection so the next poll reopens it.
+            throw started
+        }) { error in
+            if error as? ModemError == started { self.reboot = RebootWatch(message: note) }
         }
     }
 
@@ -389,11 +436,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        perform({ modem in
-            try modem.setUSBNetMode(mode)
-            // The modem is rebooting; drop the connection so the next poll reopens it.
-            throw ModemError.io("The modem is rebooting into \(mode.label)…")
-        })
+        rebootModem(note: "The modem is rebooting into \(mode.label)…") { try $0.setUSBNetMode(mode) }
     }
 
     /// A poll that also reads the eSIM again.

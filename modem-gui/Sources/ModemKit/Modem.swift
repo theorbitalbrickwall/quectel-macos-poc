@@ -80,7 +80,11 @@ public final class Modem {
         guard response.ok else {
             throw ModemError.rejected("The modem rejected the mode: \(response.lines.joined(separator: " "))")
         }
-        // The modem may leave the bus before it answers.
+        reboot()
+    }
+
+    /// Reboot the modem. It may leave the bus before it answers, so the reply is not checked.
+    public func reboot() {
         _ = try? channel.command("AT+CFUN=1,1", timeout: 3)
     }
 

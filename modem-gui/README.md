@@ -50,7 +50,13 @@ Controls: set the APN, switch the USB network mode (with a reboot), switch the
 eSIM profile, send a raw AT command, read, delete and send SMS.
 
 Works on a real modem, through the serial driver and over direct USB, except
-that setting the APN and the eSIM menu have not been tried. See
+that the eSIM menu has not been tried. A new
+APN shows in the menu at once, but the data connection keeps the old one until
+the modem attaches again, for example after it is unplugged and plugged back
+in. After setting the APN the app asks whether to reboot the modem, which
+brings it back on the new APN after about 25 seconds; the menu says that the
+modem is rebooting until then. This reboot has only been tried over direct
+USB. See
 [Status in the top-level README](../README.md#status).
 
 ### SMS
