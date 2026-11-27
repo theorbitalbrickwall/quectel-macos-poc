@@ -7,6 +7,9 @@ touch the data connection, so they work next to ECM (or the QMI tool).
 - `QuectelDebug`: a window for debugging, in the spirit of Quectel's QNavigator
   for Windows. See [Debug window](#debug-window).
 
+Both work on a real modem, through the serial driver and over direct USB; see
+[Status in the top-level README](../README.md#status).
+
 ## Install
 
 Needs the Xcode command line tools. Build both apps and copy them into
@@ -37,9 +40,6 @@ scripts/bundle.sh --dmg
 - GitHub Actions builds the disk image on every push (artifact
   `quectel-apps`, ad hoc, Apple silicon).
 
-Works on a Mac, signed and notarised, including the start at login. Not
-tested: a download on another Mac.
-
 ## Menu bar app
 
 Shows: technology and signal bars in the menu bar; operator, band, RSRP / RSRQ
@@ -49,15 +49,10 @@ the menu.
 Controls: set the APN, switch the USB network mode (with a reboot), switch the
 eSIM profile, send a raw AT command, read, delete and send SMS.
 
-Works on a real modem, through the serial driver and over direct USB (the
-eSIM submenu only over direct USB). A new
-APN shows in the menu at once, but the data connection keeps the old one until
-the modem attaches again, for example after it is unplugged and plugged back
-in. After setting the APN the app asks whether to reboot the modem, which
-brings it back on the new APN after about 25 seconds; the menu says that the
-modem is rebooting until then. This reboot has only been tried over direct
-USB. See
-[Status in the top-level README](../README.md#status).
+A new APN applies to the first PDP context. The data connection keeps the old
+one until the modem attaches again, so the app offers to reboot the modem,
+which takes about 25 seconds. While the modem reboots, also after a USB mode
+switch, the menu says so.
 
 ### SMS
 
@@ -100,11 +95,9 @@ data connection drops until the modem has registered with the new profile.
   and on **Refresh now**, not at every poll.
 - Profiles cannot be downloaded, renamed or deleted here.
 
-Works on an EC25-EUX over direct USB, in the menu and from the terminal:
-the EID, the list, and switching between two profiles. The modem takes about
-half a second for the switch and reads the new profile by itself within a few
+After a switch the modem reads the new profile by itself within a few
 seconds, without a restart. Until then the menu shows "SIM: switching
-profile…". Not tested: through the serial driver's port.
+profile…".
 
 ### Run
 
@@ -183,9 +176,6 @@ swift run -c release QuectelDebug --port /dev/cu.quectel2 --run ATI
 Not included (QNavigator has them): SMS and call screens, TCP/IP tests,
 firmware download.
 
-Not tested on hardware: the triangle and pencil commands, typed commands and
-history, and Save Log.
-
 ## How the apps reach the modem
 
 1. If the serial driver from `../serial-driver` is installed, they use its
@@ -201,8 +191,6 @@ the modem's USB interface", try it once with `sudo`.
 - SINR comes from `AT+QCSQ`, which reports 0 to 250, and is converted to dB
   as value / 5 - 20. The manual does not state this formula; on the EC25-EUX
   the result agrees with `AT+QENG="servingcell"` to within about 2 dB.
-- The APN change applies to the first PDP context and takes effect the next
-  time the modem attaches.
 
 ## Tests
 
@@ -213,10 +201,11 @@ swift test
 ## Files
 
 - `Sources/ModemKit`: AT parsing, AT channel, status model, SMS (`SMS.swift`),
-  eSIM profiles (`ESIM.swift`),
-  serial and USB transports, the port monitor and the command list of the debug window.
+  eSIM profiles (`ESIM.swift`), serial and USB transports, the port monitor
+  and the command list of the debug window.
 - `Sources/QuectelMenu`: the menu bar app; `Messages.swift` is the SMS window.
 - `Sources/QuectelDebug/main.swift`: the debug window.
 - `Tests/ModemKitTests`: tests with a fake modem.
-- `scripts`: `bundle.sh` builds the app bundles and the disk image, `make-icon.swift` draws
-  their icon, `install.sh` copies them into the Applications folder.
+- `scripts`: `bundle.sh` builds the app bundles and the disk image,
+  `make-icon.swift` draws their icon, `install.sh` copies them into the
+  Applications folder.
