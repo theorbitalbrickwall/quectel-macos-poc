@@ -250,6 +250,28 @@ final class ModemTests: XCTestCase {
         XCTAssertEqual(fake.sent, ["AT+CFUN=1,1"])
     }
 
+    func testRebootWatchWaitsUntilTheModemLeftAndAnswersFully() {
+        let start = Date(timeIntervalSince1970: 1000)
+        var watch = RebootWatch(message: "rebooting", now: start, limit: 60)
+        var full = ModemStatus()
+        full.usbNetMode = .ecm
+        // Still answering just after the reboot command: not back yet.
+        XCTAssertFalse(watch.isBack(full, now: start.addingTimeInterval(2)))
+        watch.pollFailed()
+        // Back on the bus, but the last query is not answered yet.
+        XCTAssertFalse(watch.isBack(ModemStatus(), now: start.addingTimeInterval(20)))
+        XCTAssertTrue(watch.isBack(full, now: start.addingTimeInterval(21)))
+    }
+
+    func testRebootWatchGivesUpAfterTheLimit() {
+        let start = Date(timeIntervalSince1970: 1000)
+        let watch = RebootWatch(message: "rebooting", now: start, limit: 60)
+        XCTAssertTrue(watch.isActive(now: start.addingTimeInterval(59)))
+        XCTAssertFalse(watch.isActive(now: start.addingTimeInterval(60)))
+        // A modem that never left is shown again once the limit has passed.
+        XCTAssertTrue(watch.isBack(ModemStatus(), now: start.addingTimeInterval(60)))
+    }
+
     func testRejectedUSBNetModeDoesNotReboot() {
         let fake = FakeModem(replies: [:])
         XCTAssertThrowsError(try Modem(channel: ATChannel(transport: fake)).setUSBNetMode(.ecm))

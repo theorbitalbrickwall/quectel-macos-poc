@@ -125,6 +125,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Stored message count at the last listing. Worker queue only.
     private var listedCount: Int?
     private var refreshPending = false
+    /// Set while the modem restarts on our request.
+    private var reboot: RebootWatch?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         item.button?.title = "Modem…"
@@ -154,7 +156,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 if let failure {
                     self.status = nil
-                    self.problem = failure.localizedDescription
+                    if let reboot = self.reboot, reboot.isActive() {
+                        self.problem = reboot.message
+                    } else {
+                        self.reboot = nil
+                        self.problem = failure.localizedDescription
+                    }
                 }
                 self.rebuildMenu()
                 then?(failure)
@@ -201,12 +208,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 listed = []
             }
             DispatchQueue.main.async {
-                self.status = status
-                self.problem = nil
+                if let reboot = self.reboot, !reboot.isBack(status) {
+                    self.status = nil
+                    self.problem = reboot.message
+                } else {
+                    self.reboot = nil
+                    self.status = status
+                    self.problem = nil
+                }
                 if let listed { self.received(listed) }
             }
-        }) { _ in
+        }) { error in
             self.refreshPending = false
+            if error != nil { self.reboot?.pollFailed() }
         }
     }
 
@@ -343,11 +357,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             refresh()
             return
         }
+        rebootModem(note: "The modem is rebooting…") { $0.reboot() }
+    }
+
+    /// Run `work`, which ends in a reboot, and show `note` until the modem is back.
+    private func rebootModem(note: String, _ work: @escaping (Modem) throws -> Void) {
+        let started = ModemError.io(note)
         perform({ modem in
-            modem.reboot()
+            try work(modem)
             // The modem is rebooting; drop the connection so the next poll reopens it.
-            throw ModemError.io("The modem is rebooting…")
-        })
+            throw started
+        }) { error in
+            if error as? ModemError == started { self.reboot = RebootWatch(message: note) }
+        }
     }
 
     @objc private func setMode(_ sender: NSMenuItem) {
@@ -360,11 +382,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        perform({ modem in
-            try modem.setUSBNetMode(mode)
-            // The modem is rebooting; drop the connection so the next poll reopens it.
-            throw ModemError.io("The modem is rebooting into \(mode.label)…")
-        })
+        rebootModem(note: "The modem is rebooting into \(mode.label)…") { try $0.setUSBNetMode(mode) }
     }
 
     @objc private func showMessages() {
