@@ -52,7 +52,9 @@ AT command, read, delete and send SMS.
 Works on a real modem, through the serial driver and over direct USB. A new
 APN shows in the menu at once, but the data connection keeps the old one until
 the modem attaches again, for example after it is unplugged and plugged back
-in. See [Status in the top-level README](../README.md#status).
+in. After setting the APN the app asks whether to reboot the modem; that
+question has not been tried on a modem. See
+[Status in the top-level README](../README.md#status).
 
 ### SMS
 

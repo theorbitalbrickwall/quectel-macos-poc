@@ -243,6 +243,13 @@ final class ModemTests: XCTestCase {
         XCTAssertEqual(fake.sent, ["AT+QCFG=\"usbnet\",2", "AT+CFUN=1,1"])
     }
 
+    func testRebootSendsResetAndIgnoresTheReply() {
+        // The reply is not checked: the modem may leave the bus before it answers.
+        let fake = FakeModem(replies: [:])
+        Modem(channel: ATChannel(transport: fake)).reboot()
+        XCTAssertEqual(fake.sent, ["AT+CFUN=1,1"])
+    }
+
     func testRejectedUSBNetModeDoesNotReboot() {
         let fake = FakeModem(replies: [:])
         XCTAssertThrowsError(try Modem(channel: ATChannel(transport: fake)).setUSBNetMode(.ecm))

@@ -318,11 +318,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let context = status?.contexts.first,
               let apn = ask("Set APN", detail: "Applies to context \(context.cid) (\(context.type)). "
                   + "It is used the next time the modem attaches to the network.",
-                  value: context.apn) else { return }
+                  value: context.apn), apn != context.apn else { return }
         perform({ try $0.setAPN(apn, context: context) }) { error in
-            if let error { self.show("The APN was not changed", detail: error.localizedDescription) }
-            self.refresh()
+            if let error {
+                self.show("The APN was not changed", detail: error.localizedDescription)
+                self.refresh()
+            } else {
+                self.offerReboot()
+            }
         }
+    }
+
+    /// A stored APN is only used once the modem attaches again; a reboot does that.
+    private func offerReboot() {
+        let alert = makeAlert()
+        alert.messageText = "Reboot the modem now?"
+        alert.informativeText = "The new APN is stored. The data connection keeps the old one until "
+            + "the modem attaches to the network again. A reboot does that; the current data "
+            + "connection drops while the modem restarts."
+        alert.addButton(withTitle: "Reboot")
+        alert.addButton(withTitle: "Later")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            refresh()
+            return
+        }
+        perform({ modem in
+            modem.reboot()
+            // The modem is rebooting; drop the connection so the next poll reopens it.
+            throw ModemError.io("The modem is rebooting…")
+        })
     }
 
     @objc private func setMode(_ sender: NSMenuItem) {
