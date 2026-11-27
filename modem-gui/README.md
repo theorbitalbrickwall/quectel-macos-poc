@@ -49,9 +49,10 @@ the menu.
 Controls: set the APN, switch the USB network mode (with a reboot), send a raw
 AT command, read, delete and send SMS.
 
-Works on a real modem, through the serial driver and over direct USB, except
-that setting the APN has not been tried. See
-[Status in the top-level README](../README.md#status).
+Works on a real modem, through the serial driver and over direct USB. A new
+APN shows in the menu at once, but the data connection keeps the old one until
+the modem attaches again, for example after it is unplugged and plugged back
+in. See [Status in the top-level README](../README.md#status).
 
 ### SMS
 
