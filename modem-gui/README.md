@@ -49,14 +49,14 @@ the menu.
 Controls: set the APN, switch the USB network mode (with a reboot), switch the
 eSIM profile, send a raw AT command, read, delete and send SMS.
 
-Works on a real modem, through the serial driver and over direct USB (the
-eSIM submenu only over direct USB). A new
+Works on a real modem, through the serial driver and over direct USB. A new
 APN shows in the menu at once, but the data connection keeps the old one until
 the modem attaches again, for example after it is unplugged and plugged back
 in. After setting the APN the app asks whether to reboot the modem, which
 brings it back on the new APN after about 25 seconds; the menu says that the
-modem is rebooting until then. This reboot has only been tried over direct
-USB. See
+modem is rebooting until then. Switching the USB network mode shows the same
+kind of notice, with the name of the new mode; this notice has only been tried
+through the serial driver. See
 [Status in the top-level README](../README.md#status).
 
 ### SMS
@@ -100,11 +100,12 @@ data connection drops until the modem has registered with the new profile.
   and on **Refresh now**, not at every poll.
 - Profiles cannot be downloaded, renamed or deleted here.
 
-Works on an EC25-EUX over direct USB, in the menu and from the terminal:
-the EID, the list, and switching between two profiles. The modem takes about
+Works on an EC25-EUX, through the serial driver and over direct USB, in the
+menu and from the terminal: the EID, the list, and switching between two
+profiles. The modem takes about
 half a second for the switch and reads the new profile by itself within a few
 seconds, without a restart. Until then the menu shows "SIM: switching
-profile…". Not tested: through the serial driver's port.
+profile…".
 
 ### Run
 
@@ -183,8 +184,9 @@ swift run -c release QuectelDebug --port /dev/cu.quectel2 --run ATI
 Not included (QNavigator has them): SMS and call screens, TCP/IP tests,
 firmware download.
 
-Not tested on hardware: the triangle and pencil commands, typed commands and
-history, and Save Log.
+Works on a real modem through the serial driver: all three kinds of commands
+in the list, typed commands, the history and Save Log. Over direct USB only
+the read-only commands have been tried.
 
 ## How the apps reach the modem
 

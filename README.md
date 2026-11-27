@@ -64,14 +64,14 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27.
 | --- | --- | --- |
 | `qmi-userspace` | 28 tests against a simulated modem | `info` and `connect` work. Not tested: speed, long sessions |
 | `modem-gui`: `ModemKit` | 73 unit tests | |
-| `modem-gui`: menu bar app | Compiles | Works through the driver and over direct USB. A new APN is used after the modem re-attaches; the reboot offered for that is only tested over direct USB |
+| `modem-gui`: menu bar app | Compiles | Works through the driver and over direct USB. A new APN is used after the modem re-attaches; the reboot offered for that works on both. The notice while the modem reboots into another USB mode is only tested through the driver |
 | `modem-gui`: SMS | Unit-tested against a fake modem | Works |
-| `modem-gui`: eSIM profiles (needs an eUICC as the SIM) | Unit-tested against a fake modem, parser fuzzed | Listing and switching work over direct USB. Not tested: through the driver's port |
-| `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | Read-only commands work through the driver and over direct USB. Not tested: commands that change the modem, typed commands, Save Log |
+| `modem-gui`: eSIM profiles (needs an eUICC as the SIM) | Unit-tested against a fake modem, parser fuzzed | Listing and switching work through the driver and over direct USB |
+| `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | Works through the driver: all three kinds of list commands, typed commands, history and Save Log. Over direct USB only read-only commands are tested |
 | `modem-gui`: installable apps | Apps and disk image build in CI | Work, signed and notarised, including the start at login. Not tested: a download on another Mac |
 | `quectel_at.py`, serial port | 7 tests against a fake modem | Works through the driver's ports |
 | `quectel_at.py`, raw USB | | Works without root. Cannot be used while the driver is installed |
-| `serial-driver`: driver and installer | Compiles; logic fuzzed against a fake DriverKit | Ports 1 to 3 appear; AT commands work on 2 and 3, NMEA data arrives on 1. Not tested: PPP, unplugging while open |
+| `serial-driver`: driver and installer | Compiles; logic fuzzed against a fake DriverKit | Ports 1 to 3 appear, and come back after the modem reboots; AT commands work on 2 and 3, NMEA data arrives on 1. Not tested: PPP, unplugging while open |
 
 The protocol details (QMI message layouts, the USB interface layout, raw IP
 in QMI mode) come from the Linux drivers and libqmi. The AT commands were
