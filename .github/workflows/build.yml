@@ -19,14 +19,12 @@ jobs:
           persist-credentials: false
       - name: Install XcodeGen
         run: command -v xcodegen || brew install xcodegen
-      - name: Test the AT tool against a fake modem
-        run: python3 serial-driver/tools/test_quectel_at.py
-      - name: Test the QMI tool against a simulated modem
-        run: python3 qmi-userspace/test_qmi.py
-      - name: Build and test the menu bar app
-        run: swift test --package-path modem-gui && swift build --package-path modem-gui -c release
+      - name: List the make targets
+        run: make --version && make
+      - name: Run the Python and Swift tests
+        run: make test
       - name: Bundle the apps
-        run: modem-gui/scripts/bundle.sh --dmg
+        run: make dmg
       - name: Check the app bundles
         run: |
           cd modem-gui/build
@@ -54,7 +52,11 @@ jobs:
           name: quectel-apps
           path: modem-gui/build/QuectelApps.dmg
       - name: Compile driver and installer (unsigned)
-        run: serial-driver/scripts/build.sh --unsigned
+        run: make driver
+      - name: Clean up and check that nothing is left
+        run: |
+          make clean-all
+          test -z "$(git status --porcelain --ignored)"
 
   fuzz:
     runs-on: ubuntu-24.04
@@ -66,7 +68,7 @@ jobs:
       - name: Install clang with libFuzzer
         run: sudo apt-get update && sudo apt-get install -y clang libclang-rt-18-dev
       - name: Fuzz the driver against the fake DriverKit
-        run: serial-driver/fuzz/run.sh 60
+        run: make fuzz
       - name: Keep the failing input
         if: failure()
         uses: actions/upload-artifact@v4

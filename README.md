@@ -78,11 +78,33 @@ in QMI mode) come from the Linux drivers and libqmi. The AT commands were
 checked against Quectel's manuals. If `qmi-userspace` fails, its `-v` output
 is the most useful thing to report.
 
+## Make targets
+
+The `Makefile` at the top wraps the scripts of the three folders. Without a
+target it lists what it can do:
+
+```bash
+make
+```
+
+Run all tests that work on this machine:
+
+```bash
+make test
+```
+
+Remove everything that was built, including the SwiftPM cache and the fuzz
+corpus:
+
+```bash
+make clean-all
+```
+
 ## Other files
 
 - `.github/workflows/build.yml`: runs all tests, compiles the driver and
   builds the two apps (artifact `quectel-apps`) on a macOS runner, and fuzzes
-  the driver for a minute on Linux.
+  the driver for a minute on Linux, all through the make targets.
 
 ## Credits
 
