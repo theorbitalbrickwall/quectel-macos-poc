@@ -254,6 +254,15 @@ final class ModemTests: XCTestCase {
         XCTAssertEqual(status.title, "No service")
     }
 
+    func testNoAddressWithoutAConnection() {
+        // What the EC25-EUX answers while it searches for a network.
+        XCTAssertNil(ATParser.address(["+CGPADDR: 1,\"0.0.0.0,0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0\""]))
+        XCTAssertNil(ATParser.address(["+CGPADDR: 1,\"0.0.0.0\",\"0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0\"", "+CGPADDR: 2"]))
+        XCTAssertEqual(ATParser.address(["+CGPADDR: 1,\"0.0.0.0,42.1.5.152.0.0.0.0.0.0.0.0.0.0.0.1\""]),
+                       "42.1.5.152.0.0.0.0.0.0.0.0.0.0.0.1")
+        XCTAssertEqual(ATParser.address(["+CGPADDR: 1,\"10.0.0.2\""]), "10.0.0.2")
+    }
+
     func testFallsBackTo3GRegistration() throws {
         var replies = lteReplies
         replies["AT+CEREG?"] = "+CEREG: 0,0\r\n\r\nOK"

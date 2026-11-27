@@ -184,10 +184,13 @@ public enum ATParser {
     }
 
     /// First usable address of `+CGPADDR: <cid>,<addr>[,<addr>]` lines.
+    /// Without a connection the modem gives all-zero addresses, and it can
+    /// put the IPv4 and the IPv6 one in a single quoted value.
     public static func address(_ lines: [String]) -> String? {
         for values in allParameters(of: "+CGPADDR:", in: lines) {
-            for value in values.dropFirst() where !value.isEmpty && value != "0.0.0.0" {
-                return value
+            for value in values.dropFirst().flatMap({ $0.split(separator: ",") })
+            where !value.allSatisfy({ $0 == "0" || $0 == "." || $0 == ":" || $0 == " " }) {
+                return value.trimmingCharacters(in: .whitespaces)
             }
         }
         return nil

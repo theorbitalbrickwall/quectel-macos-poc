@@ -49,8 +49,8 @@ the menu.
 Controls: set the APN, switch the USB network mode (with a reboot), switch the
 eSIM profile, send a raw AT command, read, delete and send SMS.
 
-Works on a real modem, through the serial driver and over direct USB, except
-that the eSIM menu has not been tried. A new
+Works on a real modem, through the serial driver and over direct USB; of the
+eSIM part only the terminal commands have been tried. A new
 APN shows in the menu at once, but the data connection keeps the old one until
 the modem attaches again, for example after it is unplugged and plugged back
 in. After setting the APN the app asks whether to reboot the modem, which
@@ -100,9 +100,11 @@ data connection drops until the modem has registered with the new profile.
   and on **Refresh now**, not at every poll.
 - Profiles cannot be downloaded, renamed or deleted here.
 
-Not tested on hardware. The modem's answers to the EID and list commands were
-seen on an EC25-EUX and are what the parser is tested with; switching has not
-been tried.
+Reading the EID and the profiles and switching between two profiles work on
+an EC25-EUX, from the terminal and over direct USB. The modem takes about half
+a second for the switch and reads the new profile by itself within a few
+seconds, without a restart; for a moment it reports a SIM failure. Not
+tested: the submenu itself, and the serial driver's port.
 
 ### Run
 
