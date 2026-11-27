@@ -26,6 +26,19 @@ table of what is and is not verified.
   `quectel_qmi.py -v` output (QMI frames in hex) or `log stream` output when
   something fails.
 
+## Privacy
+
+- Nothing that identifies the user's modem, SIM or connection goes into the
+  repository, a commit message, a pull request or a comment: EID, ICCID,
+  IMSI, IMEI, phone numbers, SMS contents, the names of the user's eSIM
+  profiles, assigned IP addresses.
+- Hardware output used as a test fixture keeps its format (spacing, quoting,
+  empty fields), but every identifier in it is replaced with a made-up value
+  of the same length, with valid check digits where the format has them
+  (for example ICCID `8900000000000000011F`, IMEI `860000000000001`).
+- Read the diff for such values before each commit. Screenshots and logs from
+  the user are sources for the format, not for the values.
+
 ## Layout
 
 - `qmi-userspace/`: Python. QMI over libusb plus a `utun`/`tun` tunnel.

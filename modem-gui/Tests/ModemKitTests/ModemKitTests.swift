@@ -842,7 +842,8 @@ final class SMSModemTests: XCTestCase {
 }
 
 final class ESIMTests: XCTestCase {
-    /// What the EC25-EUX sent, with three profiles on its eSIM.
+    /// The format the EC25-EUX sends, with three profiles on its eSIM. The
+    /// EID, the ICCIDs and two of the names are made up.
     static let eidLines = ["+QESIM:\"eid\",0,\"89000000000000000000000000000002\""]
     static let listLines = [
         "+QESIM:\"list\",0",
