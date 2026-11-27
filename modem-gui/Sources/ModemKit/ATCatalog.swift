@@ -4,7 +4,8 @@ import Foundation
 /// Ready-made AT commands for the debug app. Checked against Quectel's
 /// EC2x&EG2x&EG9x&EM05 series manuals: AT Commands V2.2 and QCFG AT Commands
 /// V1.6. `AT+QGMR`, `AT+QTEMP` and the GNSS commands are not in those two; the
-/// GNSS ones are in Quectel's separate GNSS manual. Not every firmware
+/// GNSS ones are in Quectel's separate GNSS manual, the eSIM ones in the eSIM
+/// LPA Application Note V1.0. Not every firmware
 /// supports every command; an unsupported one just answers ERROR.
 public struct ATCatalogEntry: Equatable {
     public enum Kind: Equatable {
@@ -55,6 +56,11 @@ public enum ATCatalog {
             .init("AT+CIMI", "IMSI"),
             .init("AT+CNUM", "Own number, if on the SIM"),
             .init("AT+CPIN=\"1234\"", "Enter the PIN", .template),
+        ]),
+        ATCatalogGroup(title: "eSIM", entries: [
+            .init("AT+QESIM=\"eid\"", "EID of the eSIM"),
+            .init("AT+QESIM=\"list\"", "Installed profiles (ICCID, enabled, nickname, provider)"),
+            .init("AT+QESIM=\"enable\",\"ICCID\"", "Switch to a profile", .template),
         ]),
         ATCatalogGroup(title: "Network", entries: [
             .init("AT+CSQ", "Signal strength (0-31)"),

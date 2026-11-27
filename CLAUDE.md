@@ -32,7 +32,7 @@ table of what is and is not verified.
   `qmi.py` is the protocol (no USB code), `quectel_qmi.py` the USB transport,
   tunnel and CLI.
 - `modem-gui/`: Swift package. `ModemKit` (AT parsing, transports, status
-  model, SMS in PDU mode, port monitor, command list), `QuectelMenu` (AppKit menu bar app) and
+  model, SMS in PDU mode, eSIM profiles, port monitor, command list), `QuectelMenu` (AppKit menu bar app) and
   `QuectelDebug` (AppKit debug window). AT commands only. Serial ports are
   opened exclusively; the menu bar app uses port 2, the debug window port 3.
   `scripts/bundle.sh` builds the two `.app` bundles and a DMG (ad hoc signed, or

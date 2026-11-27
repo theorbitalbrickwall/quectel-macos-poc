@@ -19,6 +19,9 @@ final class FakeModem: ByteTransport {
     /// A line the modem sends on its own in the middle of the message list.
     var listingNotice: String?
     private var promptLength: Int?
+    /// eSIM chip: its EID and the profiles as (ICCID, enabled, nickname, provider).
+    var eid: String?
+    var profiles: [(iccid: String, enabled: Bool, nickname: String, provider: String)] = []
 
     init(replies: [String: String], stale: String = "") {
         self.replies = replies
@@ -63,7 +66,34 @@ final class FakeModem: ByteTransport {
         pending.append(Data("\(command)\r\r\n\(body)\r\n".utf8))
     }
 
+    /// `AT+QESIM`, written the way the EC25-EUX does: no space after the
+    /// prefix, the status in quotes, nothing for an empty nickname.
+    private func esimReply(_ command: String) -> String? {
+        guard let eid else { return nil }
+        let fields = ATParser.fields(String(command.dropFirst("AT+QESIM=".count)))
+        switch fields.first {
+        case "eid":
+            return "+QESIM:\"eid\",0,\"\(eid)\"\r\n\r\nOK"
+        case "list":
+            let lines = profiles.map {
+                "\"\($0.iccid)\",\"\($0.enabled ? 1 : 0)\","
+                    + ($0.nickname.isEmpty ? "" : "\"\($0.nickname)\"") + ",\"\($0.provider)\"\r\n"
+            }
+            return "+QESIM:\"list\",0\r\n" + lines.joined() + "\r\nOK"
+        case "enable":
+            guard fields.count == 2, let index = profiles.firstIndex(where: { $0.iccid == fields[1] }) else {
+                return "+QESIM:\"enable\",2,10,1\r\n\r\nOK"  // ICCID not found
+            }
+            if profiles[index].enabled { return "+QESIM:\"enable\",2,10,2\r\n\r\nOK" }
+            for other in profiles.indices { profiles[other].enabled = other == index }
+            return "+QESIM:\"enable\",0\r\n\r\nOK"
+        default:
+            return nil
+        }
+    }
+
     private func storeReply(_ command: String) -> String? {
+        if command.hasPrefix("AT+QESIM=") { return esimReply(command) }
         switch command {
         case "AT+CMGF=0":
             return "OK"
@@ -111,6 +141,11 @@ let lteReplies = [
 ]
 
 final class ParserTests: XCTestCase {
+    func testFieldsSeeQuotesAndCommasUnderCombiningMarks() {
+        XCTAssertEqual(ATParser.fields("\"\u{301}a,b\",\"c\"\u{301},d,\u{301}e"),
+                       ["\u{301}a,b", "c\u{301}", "d", "\u{301}e"])
+    }
+
     func testFieldsHonourQuotes() {
         XCTAssertEqual(ATParser.fields(" \"FDD LTE\",\"a,b\",,7"), ["FDD LTE", "a,b", "", "7"])
     }
@@ -217,6 +252,15 @@ final class ModemTests: XCTestCase {
         XCTAssertNil(status.network)
         XCTAssertEqual(status.contexts, [])
         XCTAssertEqual(status.title, "No service")
+    }
+
+    func testNoAddressWithoutAConnection() {
+        // What the EC25-EUX answers while it searches for a network.
+        XCTAssertNil(ATParser.address(["+CGPADDR: 1,\"0.0.0.0,0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0\""]))
+        XCTAssertNil(ATParser.address(["+CGPADDR: 1,\"0.0.0.0\",\"0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0\"", "+CGPADDR: 2"]))
+        XCTAssertEqual(ATParser.address(["+CGPADDR: 1,\"0.0.0.0,42.1.5.152.0.0.0.0.0.0.0.0.0.0.0.1\""]),
+                       "42.1.5.152.0.0.0.0.0.0.0.0.0.0.0.1")
+        XCTAssertEqual(ATParser.address(["+CGPADDR: 1,\"10.0.0.2\""]), "10.0.0.2")
     }
 
     func testFallsBackTo3GRegistration() throws {
@@ -794,5 +838,231 @@ final class SMSModemTests: XCTestCase {
         XCTAssertThrowsError(try channel.command("AT+CMGS=30", payload: PDU.submitGSM, timeout: 0.3))
         XCTAssertTrue(fake.cancelled)
         XCTAssertEqual(fake.submitted, [])
+    }
+}
+
+final class ESIMTests: XCTestCase {
+    /// What the EC25-EUX sent, with three profiles on its eSIM.
+    static let eidLines = ["+QESIM:\"eid\",0,\"89000000000000000000000000000002\""]
+    static let listLines = [
+        "+QESIM:\"list\",0",
+        "\"8900000000000000011F\",\"0\",,\"Example Roaming\"",
+        "\"8900000000000000029F\",\"0\",,\"Example Travel\"",
+        "\"8900000000000000037F\",\"1\",\"Turkcell\",\"Turkcell \"",
+    ]
+    static let hardwareProfiles = [
+        ESIMProfile(iccid: "8900000000000000011F", enabled: false, nickname: "", provider: "Example Roaming"),
+        ESIMProfile(iccid: "8900000000000000029F", enabled: false, nickname: "", provider: "Example Travel"),
+        ESIMProfile(iccid: "8900000000000000037F", enabled: true, nickname: "Turkcell", provider: "Turkcell"),
+    ]
+
+    func makeFake() -> FakeModem {
+        let fake = FakeModem(replies: [:])
+        fake.eid = "89000000000000000000000000000002"
+        fake.profiles = [("8900000000000000011F", false, "", "Example Roaming"),
+                         ("8900000000000000029F", false, "", "Example Travel"),
+                         ("8900000000000000037F", true, "Turkcell", "Turkcell ")]
+        return fake
+    }
+
+    func testParsesHardwareOutput() {
+        XCTAssertEqual(ESIMParser.eid(Self.eidLines), "89000000000000000000000000000002")
+        XCTAssertEqual(ESIMParser.profiles(Self.listLines), Self.hardwareProfiles)
+        XCTAssertEqual(Self.hardwareProfiles.map { $0.name }, ["Example Roaming", "Example Travel", "Turkcell"])
+    }
+
+    func testParsesTheExamplesOfTheNote() {
+        XCTAssertEqual(ESIMParser.eid(["+QESIM: \"eid\",0,\"89049032000001000000092092075457\""]),
+                       "89049032000001000000092092075457")
+        XCTAssertEqual(ESIMParser.profiles(["+QESIM: \"list\",0",
+                                            "\"8932042000000199885F\",1,\"sim1\",\"V-Telekom\"",
+                                            "\"89320420000002068839\",0,\"YFL1\",\"YFL1\""]),
+                       [ESIMProfile(iccid: "8932042000000199885F", enabled: true, nickname: "sim1",
+                                    provider: "V-Telekom"),
+                        ESIMProfile(iccid: "89320420000002068839", enabled: false, nickname: "YFL1",
+                                    provider: "YFL1")])
+    }
+
+    func testEmptyListAndFailures() {
+        XCTAssertEqual(ESIMParser.profiles(["+QESIM: \"list\",0"]), [])
+        XCTAssertNil(ESIMParser.profiles(["+QESIM: \"list\",1,2,\"6A82\""]))
+        XCTAssertNil(ESIMParser.profiles([]))
+        XCTAssertNil(ESIMParser.eid(["+QESIM: \"eid\",1,99,0"]))
+        XCTAssertNil(ESIMParser.eid(["+QESIM: \"eid\",0,\"12\u{1B}[31m\""]))
+        XCTAssertNil(ESIMParser.eid(["+QESIM: \"list\",0"]))
+    }
+
+    func testSkipsLinesThatAreNotProfiles() {
+        let lines = ["+QESIM: \"list\",0", "RDY", "\"not an iccid\",0,\"a\",\"b\"",
+                     "\"8932042000000199885F\",x,\"a\",\"b\"", "\"8932042000000199885F\",0"]
+        XCTAssertEqual(ESIMParser.profiles(lines),
+                       [ESIMProfile(iccid: "8932042000000199885F", enabled: false, nickname: "", provider: "")])
+        XCTAssertEqual(ESIMParser.profiles(lines)?.first?.name, "8932042000000199885F")
+    }
+
+    func testCleansProfileNames() {
+        let profiles = ESIMParser.profiles(["+QESIM: \"list\",0",
+                                            "\"8932042000000199885F\",0,\"a\u{202E}b\",\" x\u{07}y \""])
+        XCTAssertEqual(profiles?.first?.nickname, "a\u{FFFD}b")
+        XCTAssertEqual(profiles?.first?.provider, "x\u{FFFD}y")
+    }
+
+    func testSurvivesMalformedProfileNames() {
+        var state: UInt64 = 0x9E37_79B9_7F4A_7C15
+        func next() -> Int {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Int(state >> 40) & 0xFF
+        }
+        let nasty: [Unicode.Scalar] = ["\u{0}", "\u{7}", "\u{9}", "\u{A}", "\u{D}", "\u{1B}", "\u{7F}", "\u{85}", "\u{9B}",
+                                       "\u{202E}", "\u{2066}", "\u{2028}", "\u{301}", ",", " ",
+                                       "+", "ş", "\u{1F600}"]
+        /// Any bytes read as UTF-8, mixed with characters that are known trouble.
+        func text(quotes: Bool) -> String {
+            var scalars = String.UnicodeScalarView()
+            for _ in 0..<(next() % 3 == 0 ? next() : next() % 24) {
+                if next() % 3 == 0 {
+                    scalars.append(nasty[next() % nasty.count])
+                } else {
+                    scalars.append(contentsOf: String(decoding: [UInt8(next()), UInt8(next())],
+                                                      as: UTF8.self).unicodeScalars)
+                }
+            }
+            var kept = String.UnicodeScalarView()
+            kept.append(contentsOf: scalars.filter { quotes || $0 != "\"" })
+            return String(kept)
+        }
+        func check(_ profile: ESIMProfile, _ line: String) {
+            XCTAssertTrue(ESIMParser.isValidICCID(profile.iccid), line.debugDescription)
+            for name in [profile.nickname, profile.provider, profile.name] {
+                XCTAssertLessThanOrEqual(name.unicodeScalars.count, ESIMParser.maxNameLength)
+                XCTAssertEqual(name, name.trimmingCharacters(in: .whitespaces), line.debugDescription)
+                XCTAssertFalse(name.unicodeScalars.contains {
+                    switch $0.value {
+                    case 0x00...0x1F, 0x7F...0x9F, 0x202A...0x202E, 0x2066...0x2069, 0x2028, 0x2029: return true
+                    default: return false
+                    }
+                }, line.debugDescription)
+            }
+            XCTAssertFalse(profile.name.isEmpty)
+        }
+        let iccids = ["8900000000000000011F", "89320420000002068839", "8900000000000000037F"]
+        let blank: [Unicode.Scalar] = [" ", "\u{9}", "\u{A}", "\u{D}", "\u{85}", "\u{2028}", "\u{2029}", "\u{A0}"]
+        var named = 0
+        for round in 0..<20000 {
+            let iccid = iccids[round % iccids.count]
+            let enabled = next() % 2 == 1
+            let status = round % 2 == 0 ? "\"\(enabled ? 1 : 0)\"" : "\(enabled ? 1 : 0)"
+            // Names without a quote cannot touch the ICCID or the status,
+            // whatever else is in them, and come out as what was put in.
+            let names = [text(quotes: false), text(quotes: false)]
+            // Only blanks, including line ends, make an empty name.
+            let expectEmpty = names.map { $0.unicodeScalars.allSatisfy { blank.contains($0) } }
+            let line = "\"\(iccid)\",\(status),\"\(names[0])\",\"\(names[1])\""
+            let profiles = ESIMParser.profiles(["+QESIM:\"list\",0", line])
+            XCTAssertEqual(profiles?.count, 1, line.debugDescription)
+            XCTAssertEqual(profiles?.first?.iccid, iccid, line.debugDescription)
+            XCTAssertEqual(profiles?.first?.enabled, enabled, line.debugDescription)
+            if let profile = profiles?.first {
+                check(profile, line)
+                XCTAssertEqual(profile.nickname.isEmpty, expectEmpty[0], line.debugDescription)
+                XCTAssertEqual(profile.provider.isEmpty, expectEmpty[1], line.debugDescription)
+                if profile.name != iccid { named += 1 }
+            }
+            // With quotes in the names, and with damaged lines, the fields may
+            // shift, but what comes out must still be safe to show and to send.
+            var broken = "\"\(iccid)\",\(status),\"\(text(quotes: true))\",\"\(text(quotes: true))\""
+            if round % 3 == 0 {
+                var bytes = Array(broken.utf8)
+                for _ in 0...(next() % 4) { bytes[next() % bytes.count] = UInt8(next()) }
+                if next() % 4 == 0 { bytes.removeLast(next() % bytes.count) }
+                broken = String(decoding: bytes, as: UTF8.self)
+            }
+            let lines = ["+QESIM: \"list\",0"] + broken.split(whereSeparator: { $0.isNewline }).map(String.init)
+            for profile in ESIMParser.profiles(lines) ?? [] { check(profile, broken) }
+            _ = ESIMParser.eid([broken])
+            _ = ESIMParser.eid(["+QESIM: \"eid\",0," + broken])
+        }
+        XCTAssertGreaterThan(named, 15000)
+    }
+
+    func testLongProfileNamesAreCut() {
+        let long = String(repeating: "x", count: 500)
+        let marks = "e" + String(repeating: "\u{301}", count: 500)
+        let profiles = ESIMParser.profiles(["+QESIM: \"list\",0",
+                                            "\"8932042000000199885F\",0,\"\(long)\",\"\(marks)\""])
+        XCTAssertEqual(profiles?.first?.nickname, String(repeating: "x", count: 64))
+        XCTAssertEqual(profiles?.first?.provider.unicodeScalars.count, 64)
+    }
+
+    func testICCIDValidation() {
+        XCTAssertTrue(ESIMParser.isValidICCID("8900000000000000037F"))
+        XCTAssertTrue(ESIMParser.isValidICCID("89320420000002068839"))
+        XCTAssertFalse(ESIMParser.isValidICCID(""))
+        XCTAssertFalse(ESIMParser.isValidICCID("8900000000000000037F0"))
+        XCTAssertFalse(ESIMParser.isValidICCID("89900116\"\rAT+CFUN=0"))
+        XCTAssertFalse(ESIMParser.isValidICCID("８９９００１１６１４０２"))
+    }
+
+    func testFailureDescriptions() {
+        XCTAssertEqual(ESIMFailure(result: 2, info1: 10, info2: 1).description,
+                       "eSIM error: profile not found (10, 1)")
+        XCTAssertEqual(ESIMFailure(result: 2, info1: 10, info2: 3).description,
+                       "eSIM error: not allowed by the profile's policy (10, 3)")
+        XCTAssertEqual(ESIMFailure(result: 1, info1: 99, info2: 0).description, "internal error (99, 0)")
+        XCTAssertEqual(ESIMFailure(result: 3, info1: nil, info2: nil).description, "SM-DP+ error")
+    }
+
+    func testReadsEIDAndProfilesFromTheModem() throws {
+        let fake = makeFake()
+        let info = try Modem(channel: ATChannel(transport: fake)).esim()
+        XCTAssertEqual(info, ESIMInfo(eid: "89000000000000000000000000000002", profiles: Self.hardwareProfiles))
+        XCTAssertEqual(fake.sent, ["AT+QESIM=\"eid\"", "AT+QESIM=\"list\""])
+    }
+
+    func testNoESIM() throws {
+        // A modem that does not know the command, and one whose SIM is not an eSIM.
+        let plain = FakeModem(replies: [:])
+        XCTAssertNil(try Modem(channel: ATChannel(transport: plain)).esim())
+        XCTAssertEqual(plain.sent, ["AT+QESIM=\"eid\""])
+        let failing = FakeModem(replies: ["AT+QESIM=\"eid\"": "+QESIM: \"eid\",1,2,6A82\r\n\r\nOK"])
+        XCTAssertNil(try Modem(channel: ATChannel(transport: failing)).esim())
+    }
+
+    func testNoESIMInfoWhenTheListFails() throws {
+        let fake = makeFake()
+        fake.replies["AT+QESIM=\"list\""] = "+QESIM: \"list\",1,2,6985\r\n\r\nOK"
+        XCTAssertNil(try Modem(channel: ATChannel(transport: fake)).esim())
+    }
+
+    func testEnablesAProfile() throws {
+        let fake = makeFake()
+        let modem = Modem(channel: ATChannel(transport: fake))
+        try modem.enableESIMProfile(Self.hardwareProfiles[0])
+        XCTAssertEqual(fake.sent, ["AT+QESIM=\"enable\",\"8900000000000000011F\""])
+        XCTAssertEqual(try modem.esim()?.profiles.map { $0.enabled }, [true, false, false])
+    }
+
+    func testEnableFailuresAreReported() {
+        let fake = makeFake()
+        let modem = Modem(channel: ATChannel(transport: fake))
+        XCTAssertThrowsError(try modem.enableESIMProfile(Self.hardwareProfiles[2])) {
+            XCTAssertEqual($0 as? ModemError,
+                           .rejected("The profile was not enabled: eSIM error: the profile is not disabled (10, 2)"))
+        }
+        let unknown = ESIMProfile(iccid: "89320420000002068839", enabled: false, nickname: "", provider: "")
+        XCTAssertThrowsError(try modem.enableESIMProfile(unknown)) {
+            XCTAssertEqual($0 as? ModemError,
+                           .rejected("The profile was not enabled: eSIM error: profile not found (10, 1)"))
+        }
+        // A plain ERROR, without a +QESIM line.
+        XCTAssertThrowsError(try Modem(channel: ATChannel(transport: FakeModem(replies: [:])))
+            .enableESIMProfile(unknown))
+    }
+
+    func testBadICCIDNeverReachesTheModem() {
+        let fake = makeFake()
+        let hostile = ESIMProfile(iccid: "89\"\rAT+CFUN=0", enabled: false, nickname: "", provider: "")
+        XCTAssertThrowsError(try Modem(channel: ATChannel(transport: fake)).enableESIMProfile(hostile))
+        XCTAssertEqual(fake.sent, [])
     }
 }

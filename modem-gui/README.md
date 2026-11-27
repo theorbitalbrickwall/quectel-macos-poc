@@ -37,8 +37,8 @@ scripts/bundle.sh --dmg
 - GitHub Actions builds the disk image on every push (artifact
   `quectel-apps`, ad hoc, Apple silicon).
 
-Works on a Mac, signed and notarised. Not tested: the start at the next
-login, and a download on another Mac.
+Works on a Mac, signed and notarised, including the start at login. Not
+tested: a download on another Mac.
 
 ## Menu bar app
 
@@ -46,10 +46,11 @@ Shows: technology and signal bars in the menu bar; operator, band, RSRP / RSRQ
 / SINR / RSSI, registration, SIM state, APN, IP address and USB network mode in
 the menu.
 
-Controls: set the APN, switch the USB network mode (with a reboot), send a raw
-AT command, read, delete and send SMS.
+Controls: set the APN, switch the USB network mode (with a reboot), switch the
+eSIM profile, send a raw AT command, read, delete and send SMS.
 
-Works on a real modem, through the serial driver and over direct USB. A new
+Works on a real modem, through the serial driver and over direct USB (the
+eSIM submenu only over direct USB). A new
 APN shows in the menu at once, but the data connection keeps the old one until
 the modem attaches again, for example after it is unplugged and plugged back
 in. After setting the APN the app asks whether to reboot the modem, which
@@ -78,6 +79,33 @@ until the window is opened.
 - Reading the list marks the messages as read on the modem, so after a
   restart of the app they no longer count as new.
 
+### eSIM
+
+Needs an eUICC as the modem's SIM: a removable eSIM card in the SIM slot, or
+one soldered next to the modem. A normal SIM has no profiles to switch
+between.
+
+With an eUICC, the **eSIM** submenu shows its EID (click to copy
+it) and the installed profiles with their ICCID. The profile in use has a
+check mark. Choosing another one switches to it, after a confirmation; the
+data connection drops until the modem has registered with the new profile.
+
+- Switching sends one command, to enable the chosen profile. The eUICC
+  disables the profile in use itself, and keeps it when the switch fails.
+- This uses the modem's own `AT+QESIM` commands. Without an eUICC, or with a
+  firmware that lacks the command, the submenu is not shown.
+- Profile names come from the operator and are not trusted: they are cleaned
+  like SMS text and cut to 64 characters.
+- The eSIM is read when the app finds the modem, when the SIM state changes
+  and on **Refresh now**, not at every poll.
+- Profiles cannot be downloaded, renamed or deleted here.
+
+Works on an EC25-EUX over direct USB, in the menu and from the terminal:
+the EID, the list, and switching between two profiles. The modem takes about
+half a second for the switch and reads the new profile by itself within a few
+seconds, without a restart. Until then the menu shows "SIM: switching
+profile…". Not tested: through the serial driver's port.
+
 ### Run
 
 Without installing:
@@ -104,13 +132,25 @@ Send one SMS from the terminal:
 swift run -c release QuectelMenu --send-sms +491701234567 "Merhaba dünya"
 ```
 
+The eSIM's EID and profiles in the terminal:
+
+```bash
+swift run -c release QuectelMenu --esim
+```
+
+Switch to the profile with this ICCID, without a confirmation:
+
+```bash
+swift run -c release QuectelMenu --esim-enable 8932042000000199885F
+```
+
 ## Debug window
 
 ```bash
 swift run -c release QuectelDebug
 ```
 
-- Left: a list of ready-made AT commands, in groups (module, SIM, network,
+- Left: a list of ready-made AT commands, in groups (module, SIM, eSIM, network,
   data, USB, GNSS, SMS, power). Double-click one to send it. Commands with an
   orange warning triangle change the modem's state and ask first. Commands
   with a blue pencil have values to fill in, so they are put in the input
@@ -173,6 +213,7 @@ swift test
 ## Files
 
 - `Sources/ModemKit`: AT parsing, AT channel, status model, SMS (`SMS.swift`),
+  eSIM profiles (`ESIM.swift`),
   serial and USB transports, the port monitor and the command list of the debug window.
 - `Sources/QuectelMenu`: the menu bar app; `Messages.swift` is the SMS window.
 - `Sources/QuectelDebug/main.swift`: the debug window.

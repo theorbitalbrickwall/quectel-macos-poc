@@ -10,7 +10,7 @@ proofs of concept:
 | Folder | What it is | Needs |
 | --- | --- | --- |
 | [`qmi-userspace/`](qmi-userspace/) | Data connection over QMI from a Python script, through libusb and a `utun` interface | `usbnet` 0, libusb + pyusb, root |
-| [`modem-gui/`](modem-gui/) | Two apps over AT commands: a menu bar app (signal, operator, APN, USB mode, SMS) and a debug window (live AT log, command list). They leave the data connection alone | Xcode command line tools |
+| [`modem-gui/`](modem-gui/) | Two apps over AT commands: a menu bar app (signal, operator, APN, USB mode, eSIM profiles, SMS) and a debug window (live AT log, command list). They leave the data connection alone | Xcode command line tools |
 | [`serial-driver/`](serial-driver/) | DriverKit driver publishing the AT ports as `/dev/cu.quectel*`, plus an AT command script that also works without the driver | Paid Apple Developer team for the driver; nothing for the script |
 
 Suggested order for testing: `serial-driver/tools/quectel_at.py --usb ATI`
@@ -63,11 +63,12 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27.
 | Item | Without hardware | On hardware |
 | --- | --- | --- |
 | `qmi-userspace` | 28 tests against a simulated modem | `info` and `connect` work. Not tested: speed, long sessions |
-| `modem-gui`: `ModemKit` | 56 unit tests | |
+| `modem-gui`: `ModemKit` | 73 unit tests | |
 | `modem-gui`: menu bar app | Compiles | Works through the driver and over direct USB. A new APN is used after the modem re-attaches; the reboot offered for that is only tested over direct USB |
 | `modem-gui`: SMS | Unit-tested against a fake modem | Works |
+| `modem-gui`: eSIM profiles (needs an eUICC as the SIM) | Unit-tested against a fake modem, parser fuzzed | Listing and switching work over direct USB. Not tested: through the driver's port |
 | `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | Read-only commands work through the driver and over direct USB. Not tested: commands that change the modem, typed commands, Save Log |
-| `modem-gui`: installable apps | Apps and disk image build in CI | Work, signed and notarised. Not tested: the start at login, a download on another Mac |
+| `modem-gui`: installable apps | Apps and disk image build in CI | Work, signed and notarised, including the start at login. Not tested: a download on another Mac |
 | `quectel_at.py`, serial port | 7 tests against a fake modem | Works through the driver's ports |
 | `quectel_at.py`, raw USB | | Works without root. Cannot be used while the driver is installed |
 | `serial-driver`: driver and installer | Compiles; logic fuzzed against a fake DriverKit | Ports 1 to 3 appear; AT commands work on 2 and 3, NMEA data arrives on 1. Not tested: PPP, unplugging while open |
@@ -111,7 +112,13 @@ Projects the code follows:
   message layouts and the connect sequence used by `qmi-userspace`. Facts
   only; no code was taken.
 - Quectel's AT command manuals for the EC2x series: every AT command used
-  here. The debug window is modelled on Quectel's QNavigator tool for Windows.
+  here. The eSIM commands (`AT+QESIM`) and their error codes are from
+  Quectel's EC2x&EG2x&EG9x&EM05 Series eSIM LPA Application Note V1.0. The
+  debug window is modelled on Quectel's QNavigator tool for Windows.
+- The GSMA specification
+  [SGP.22](https://www.gsma.com/solutions-and-impact/technologies/esim/gsma_resources/sgp-22-v3-0/)
+  (RSP Technical Specification, V3.0): what enabling an eSIM profile does to
+  the profile in use, and the meaning of the eSIM error codes.
 - The 3GPP specifications
   [TS 23.040](https://www.3gpp.org/dynareport/23040.htm) and
   [TS 23.038](https://www.3gpp.org/dynareport/23038.htm) (as ETSI TS 123 040
