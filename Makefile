@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: CC0-1.0
 # Shortcuts for the scripts in this repository. Run `make` for the list.
 # Written for the make of the Xcode command line tools (GNU make 3.81). It
-# avoids GNU-only syntax, but has not been tried with BSD make.
+# avoids GNU-only syntax, so BSD make (bmake) works too.
 #
 # A line "name: ## text" puts the target in the list printed by `make help`,
 # and a line "##@ text" starts a new group there.

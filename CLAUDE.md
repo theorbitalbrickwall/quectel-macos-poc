@@ -55,7 +55,7 @@ table of what is and is not verified.
   `tools/quectel_at.py` (AT commands over a serial port or raw USB).
 - `Makefile`: thin wrapper over the scripts (`make` lists the targets; CI
   calls them). Keep it working with GNU make 3.81, the one macOS ships, and
-  give every new target a `## ` description so that it shows in the list.
+  with bmake, and give every new target a `## ` description so that it shows in the list.
 
 ## Tests
 
