@@ -169,6 +169,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var esimRetries = 0
     /// Until when a SIM error is the expected effect of a profile switch.
     private var switchingUntil: Date?
+    /// A profile switch was sent and no poll has shown its effect yet.
+    private var switchPending = false
     /// Set while the modem restarts on our request.
     private var reboot: RebootWatch?
 
@@ -202,6 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let failure {
                     self.status = nil
                     self.esim = nil
+                    self.switchPending = false
                     if let reboot = self.reboot, reboot.isActive() {
                         self.problem = reboot.message
                     } else {
@@ -282,6 +285,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.problem = nil
                 }
                 if reload && !keep { self.esim = chip }
+                self.switchPending = false
                 if let listed { self.received(listed) }
             }
         }) { error in
@@ -310,7 +314,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func rebuildMenu() {
-        item.button?.title = (status?.title ?? "No modem") + (unseen.isEmpty ? "" : " ✉\(unseen.count)")
+        item.button?.title = (switchPending ? "Switching eSIM…" : status?.title ?? "No modem")
+            + (unseen.isEmpty ? "" : " ✉\(unseen.count)")
         let menu = NSMenu()
         menu.autoenablesItems = false
         func add(_ title: String, _ action: Selector? = nil, enabled: Bool = true) -> NSMenuItem {
@@ -500,12 +505,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        item.button?.title = "Switching eSIM…"
+        switchPending = true
+        rebuildMenu()
         perform({ modem in
             try modem.enableESIMProfile(profile)
             self.esimLoaded = false
         }) { error in
             if let error {
+                self.switchPending = false
+                self.rebuildMenu()
                 self.show("The eSIM profile was not changed", detail: error.localizedDescription)
             } else {
                 self.switchingUntil = Date().addingTimeInterval(30)
