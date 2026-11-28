@@ -24,7 +24,8 @@ jobs:
       - name: Run the Python and Swift tests
         run: make test
       - name: Bundle the apps
-        run: make dmg
+        # Universal and with a version, the way release.yml builds them.
+        run: make dmg VERSION=1.2.3 BUILD=45 ARCHS="arm64 x86_64"
       - name: Check the app bundles
         run: |
           cd modem-gui/build
@@ -34,6 +35,9 @@ jobs:
             test -s "$app.app/Contents/Resources/AppIcon.icns"
             # Without this key System Information lists the app as iOS.
             test "$(plutil -extract CFBundleSupportedPlatforms.0 raw "$app.app/Contents/Info.plist")" = MacOSX
+            test "$(plutil -extract CFBundleShortVersionString raw "$app.app/Contents/Info.plist")" = 1.2.3
+            test "$(plutil -extract CFBundleVersion raw "$app.app/Contents/Info.plist")" = 45
+            lipo "$app.app/Contents/MacOS/$app" -verify_arch arm64 x86_64
           done
           # Right after the image is made, attach can fail with
           # "Resource temporarily unavailable"; give it a few tries.

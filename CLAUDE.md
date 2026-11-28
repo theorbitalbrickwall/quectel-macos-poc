@@ -50,6 +50,10 @@ table of what is and is not verified.
   opened exclusively; the menu bar app uses port 2, the debug window port 3.
   `scripts/bundle.sh` builds the two `.app` bundles and a DMG (ad hoc signed, or
   with `DEVELOPMENT_TEAM`; also in CI), `scripts/install.sh` copies them into `/Applications`.
+  `.github/workflows/release.yml` runs on `v*` tags only: Developer ID
+  signing, notarisation and a GitHub release of the DMG, with secrets listed
+  in `modem-gui/README.md`. `build.yml` stays unsigned. The driver is never
+  part of a release.
 - `serial-driver/`: DriverKit serial driver (`Driver/`), installer app
   (`Installer/`), XcodeGen project (`project.yml`), and
   `tools/quectel_at.py` (AT commands over a serial port or raw USB).

@@ -69,6 +69,7 @@ Hardware means one EC25-EUX on an M1 Max with macOS 27.
 | `modem-gui`: eSIM profiles (needs an eUICC as the SIM) | Unit-tested against a fake modem, parser fuzzed | Works, through the driver and over direct USB |
 | `modem-gui`: `QuectelDebug` | Monitor and command list are unit-tested | Works |
 | `modem-gui`: installable apps | Apps and disk image build in CI | Work, signed and notarised. Not tested: a download on another Mac |
+| `modem-gui`: releases from CI | Unsigned universal build runs in CI. Not tested: signing, notarising and publishing in `release.yml` | |
 | `quectel_at.py`, serial port | 7 tests against a fake modem | Works through the driver's ports |
 | `quectel_at.py`, raw USB | | Works without root. Cannot be used while the driver is installed |
 | `serial-driver`: driver and installer | Compiles; logic fuzzed against a fake DriverKit | Ports 1 to 3 work and come back after a modem reboot. Not tested: PPP, unplugging while open |
@@ -105,6 +106,9 @@ make clean-all
 - `.github/workflows/build.yml`: runs all tests, compiles the driver and
   builds the two apps (artifact `quectel-apps`) on a macOS runner, and fuzzes
   the driver for a minute on Linux, all through the make targets.
+- `.github/workflows/release.yml`: on a version tag, signs and notarises the
+  two apps and publishes the disk image as a GitHub release; see
+  [Releases](modem-gui/README.md#releases).
 
 ## Credits
 

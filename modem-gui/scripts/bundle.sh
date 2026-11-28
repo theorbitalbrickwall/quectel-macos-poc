@@ -8,16 +8,34 @@
 #                                   sign with a certificate of that team
 #        SIGN_IDENTITY="Developer ID Application: ..." scripts/bundle.sh
 #                                   sign with exactly this certificate
-#        NOTARY_PROFILE=name ...    also notarise the disk image, with a
-#                                   profile from `notarytool store-credentials`
+#        NOTARY_PROFILE=name ...    with --dmg: also notarise the apps and
+#                                   the disk image, with a profile from
+#                                   `notarytool store-credentials`
+#        NOTARY_KEY=AuthKey.p8 NOTARY_KEY_ID=... NOTARY_ISSUER=... ...
+#                                   the same with an App Store Connect API
+#                                   key instead of a profile
+#        VERSION=1.2.3 BUILD=45 ... version numbers of the apps
+#        ARCHS="arm64 x86_64" ...   universal apps (needs Xcode, not only the
+#                                   command line tools)
 # Without a team or identity the apps are signed ad hoc (no Apple developer
-# account). They are built for the architecture of this Mac only.
+# account). Without ARCHS they are built for the architecture of this Mac.
 set -eu
 cd "$(dirname "$0")/.."
 
-VERSION=0.1.0
-BUILD=1
+VERSION=${VERSION:-0.1.0}
+BUILD=${BUILD:-1}
 OUT=build
+
+# How notarytool logs in: a keychain profile or an App Store Connect API key.
+if [ -n "${NOTARY_PROFILE:-}" ]; then
+    NOTARY=profile
+elif [ -n "${NOTARY_KEY:-}" ]; then
+    : "${NOTARY_KEY_ID:?NOTARY_KEY also needs NOTARY_KEY_ID}"
+    : "${NOTARY_ISSUER:?NOTARY_KEY also needs NOTARY_ISSUER}"
+    NOTARY=key
+else
+    NOTARY=
+fi
 
 # The code signing certificates in the keychain, one "HASH NAME" per line.
 identities() {
@@ -63,8 +81,37 @@ sign() {
     fi
 }
 
-swift build -c release
-BIN=$(swift build -c release --show-bin-path)
+# notarytool SUBCOMMAND ARGS...: run it with the login chosen above.
+notarytool() {
+    if [ "$NOTARY" = profile ]; then
+        xcrun notarytool "$@" --keychain-profile "$NOTARY_PROFILE"
+    else
+        xcrun notarytool "$@" --key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER"
+    fi
+}
+
+# notarise FILE: send a zip or disk image to Apple and wait for the verdict.
+# On a refusal, print Apple's list of what is wrong with it.
+notarise() {
+    result=$(notarytool submit "$1" --wait) || { echo "$result"; exit 1; }
+    echo "$result"
+    if ! echo "$result" | grep -q "status: Accepted"; then
+        id=$(echo "$result" | sed -n 's/^ *id: //p' | head -1)
+        [ -z "$id" ] || notarytool log "$id" || true
+        echo "Apple did not notarise $1." >&2
+        exit 1
+    fi
+}
+
+ARCH_FLAGS=
+for arch in ${ARCHS:-}; do
+    ARCH_FLAGS="$ARCH_FLAGS --arch $arch"
+done
+# shellcheck disable=SC2086
+swift build -c release $ARCH_FLAGS
+# shellcheck disable=SC2086
+BIN=$(swift build -c release $ARCH_FLAGS --show-bin-path)
 
 # bundle EXECUTABLE DISPLAY_NAME BUNDLE_ID ICON_STYLE MENU_BAR_ONLY
 bundle() {
@@ -131,6 +178,20 @@ if [ "${1:-}" = --dmg ]; then
     dmg="$OUT/QuectelApps.dmg"
     stage="$OUT/dmg"
     rm -rf "$stage" "$dmg"
+    if [ -n "$NOTARY" ]; then
+        # The apps get their own ticket, so that a copy taken out of the
+        # disk image opens on a Mac that is offline.
+        zip="$OUT/QuectelApps.zip"
+        mkdir -p "$stage"
+        ditto "$OUT/QuectelMenu.app" "$stage/QuectelMenu.app"
+        ditto "$OUT/QuectelDebug.app" "$stage/QuectelDebug.app"
+        ditto -c -k "$stage" "$zip"
+        rm -rf "$stage"
+        notarise "$zip"
+        rm -f "$zip"
+        xcrun stapler staple "$OUT/QuectelMenu.app"
+        xcrun stapler staple "$OUT/QuectelDebug.app"
+    fi
     mkdir -p "$stage"
     ditto "$OUT/QuectelMenu.app" "$stage/QuectelMenu.app"
     ditto "$OUT/QuectelDebug.app" "$stage/QuectelDebug.app"
@@ -140,8 +201,8 @@ if [ "${1:-}" = --dmg ]; then
     if [ -n "$IDENTITY" ]; then
         codesign --force --timestamp --sign "$IDENTITY" "$dmg"
     fi
-    if [ -n "${NOTARY_PROFILE:-}" ]; then
-        xcrun notarytool submit "$dmg" --keychain-profile "$NOTARY_PROFILE" --wait
+    if [ -n "$NOTARY" ]; then
+        notarise "$dmg"
         xcrun stapler staple "$dmg"
     fi
     echo "Packed $PWD/$dmg"

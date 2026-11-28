@@ -24,7 +24,10 @@ help: ## Show this list
 	@echo "  DEVELOPMENT_TEAM  Apple developer team ID to sign with (apps, dmg,"
 	@echo "                    install; required for driver-signed)"
 	@echo "  SIGN_IDENTITY     exact certificate for apps, dmg and install"
-	@echo "  NOTARY_PROFILE    notarytool profile; 'dmg' then notarises the image"
+	@echo "  NOTARY_PROFILE    notarytool profile; 'dmg' then notarises the apps"
+	@echo "                    and the image"
+	@echo "  VERSION, BUILD    version numbers of the apps (default 0.1.0 and 1)"
+	@echo "  ARCHS             \"arm64 x86_64\" builds universal apps (needs Xcode)"
 	@echo "  DESTINATION       folder for install and uninstall (default /Applications)"
 
 ##@ Tests
