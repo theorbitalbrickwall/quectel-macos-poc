@@ -33,12 +33,50 @@ scripts/bundle.sh --dmg
 ```
 
 - The apps are signed ad hoc and built for the processor type of this Mac.
+  `ARCHS="arm64 x86_64"` builds universal apps; that needs Xcode.
 - Set `DEVELOPMENT_TEAM` to an Apple developer team ID to sign with that
   team's certificate, and `NOTARY_PROFILE` to a `notarytool` profile to
-  notarise the disk image. Other Macs warn about apps without both.
+  notarise the apps and the disk image. Other Macs warn about apps without
+  both.
 - **Open at login** in the menu bar app's menu starts it when you log in.
 - GitHub Actions builds the disk image on every push (artifact
-  `quectel-apps`, ad hoc, Apple silicon).
+  `quectel-apps`, ad hoc, universal).
+
+## Releases
+
+Pushing a version tag makes GitHub Actions (`release.yml`) build universal
+apps, sign them with a Developer ID certificate, have Apple notarise them and
+publish `QuectelApps-<version>.dmg` as a GitHub release:
+
+```bash
+git tag v1.2.3
+```
+
+```bash
+git push origin v1.2.3
+```
+
+A tag like `v1.2.3-rc1` makes a pre-release. The serial driver is not part of
+a release: its USB entitlement has to come from Apple first.
+
+The workflow needs these repository secrets (Settings, Secrets and variables,
+Actions):
+
+| Secret | Content |
+| --- | --- |
+| `DEVELOPER_ID_P12_BASE64` | The Developer ID Application certificate with its private key, exported from Keychain Access as a `.p12` file and encoded with `base64` |
+| `DEVELOPER_ID_P12_PASSWORD` | The password chosen for that export |
+| `NOTARY_KEY_P8` | The text of an App Store Connect API key file (`AuthKey_<key ID>.p8`); a team key with the Developer role is enough |
+| `NOTARY_KEY_ID` | The key ID of that key |
+| `NOTARY_ISSUER_ID` | The issuer ID shown above the key list in App Store Connect |
+
+Encode the exported certificate for the first secret:
+
+```bash
+base64 -i DeveloperID.p12 | pbcopy
+```
+
+This workflow has not made a release yet.
 
 ## Menu bar app
 
@@ -206,6 +244,7 @@ swift test
 - `Sources/QuectelMenu`: the menu bar app; `Messages.swift` is the SMS window.
 - `Sources/QuectelDebug/main.swift`: the debug window.
 - `Tests/ModemKitTests`: tests with a fake modem.
-- `scripts`: `bundle.sh` builds the app bundles and the disk image,
+- `scripts`: `bundle.sh` builds the app bundles and the disk image (and
+  signs and notarises them when asked),
   `make-icon.swift` draws their icon, `install.sh` copies them into the
   Applications folder.
