@@ -152,6 +152,11 @@ Projects the code follows:
   7-bit alphabet and the Turkish character tables used by `modem-gui`. The SMS
   AT commands are those of
   [TS 27.005](https://www.3gpp.org/dynareport/27005.htm).
+- Apple's guide
+  [Notarizing macOS software before distribution](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)
+  and GitHub's guide
+  [Installing an Apple certificate on macOS runners](https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications):
+  the signing, notarising and keychain steps of the release workflow.
 
 Projects that answered the feasibility questions:
 
